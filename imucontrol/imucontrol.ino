@@ -36,9 +36,11 @@ THE SOFTWARE.
 #include "I2Cdev.h"
 #include "MPU6050.h"
 #include "HMC5883L.h"
+#include "MS5611.h"
 
 MPU6050 mpu;
 HMC5883L mag;
+MS5611 baro;
 
 int16_t mx, my, mz;
 int16_t ax, ay, az;
@@ -51,6 +53,13 @@ int16_t gx, gy, gz;
 bool blinkState = false;
 
 void setup() {
+    delay(500); // programmer creates garbage otherwise
+  
+    // Pull SCL low to reset the bus
+    pinMode(P1_6, OUTPUT);
+    digitalWrite(P1_6, LOW);
+    delay(1);
+  
     // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
     
@@ -68,11 +77,14 @@ void setup() {
     mpu.setI2CBypassEnabled(true);
     mpu.setI2CMasterModeEnabled(false);
     mag.initialize();
+    baro.initialize();
 
     // verify connection
     Serial.println("Testing device connections...");
     Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
     Serial.println(mag.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");    
+    Serial.println(baro.testConnection() ? "MS5611 connection successful" : "MS5611 connection failed");    
+
     for (int i = 0; i < 10; i++) loop();
     delay(5000);
     // configure Arduino LED for
@@ -83,10 +95,17 @@ void loop() {
     // read raw accel/gyro measurements from device
     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
     mag.getHeading(&mx, &my, &mz);
+    baro.startReadTemperature(MS5611_SAMPLES_256);
+    delay(1);
+    float t = baro.finishReadTemperature();
+    baro.startReadPressure(MS5611_SAMPLES_256);
+    delay(1);
+    float p = baro.finishReadPressure();
+
 
     #ifdef OUTPUT_READABLE_mpu
         // display tab-separated accel/gyro x/y/z values
-        Serial.print("a/g/m:\t");
+        Serial.print("data\t");
         Serial.print(ax); Serial.print("\t");
         Serial.print(ay); Serial.print("\t");
         Serial.print(az); Serial.print("\t");
@@ -96,6 +115,8 @@ void loop() {
         Serial.print(mx); Serial.print("\t");
         Serial.print(my); Serial.print("\t");
         Serial.print(mz); Serial.print("\t");
+        Serial.print(t); Serial.print("\t");
+        Serial.print(p); Serial.print("\t");
         Serial.println();
     #endif
 
