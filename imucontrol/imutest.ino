@@ -42,63 +42,23 @@ MPU6050 mpu;
 HMC5883L mag;
 MS5611 baro;
 
-// offsets
-int16_t gxo, gyo, gzo;
-int16_t axo, ayo, azo;
-
-// measured (and corrected) values
 int16_t mx, my, mz;
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
-float t, p;
 
+#define OUTPUT_READABLE_mpu
+//#define OUTPUT_BINARY_mpu
+
+#define LED_PIN RED_LED
 bool blinkState = false;
 
-// IMU helpers
-void readSensorsIMU() {
-  // Gyroscope & Accelerometer
-  mpu.getMotion6(&ax, &ay, &az,  &gx, &gy, &gz);
-  gx -= gxo; gy -= gyo; gz -= gzo;
-  ax -= axo; ay -= ayo; az -= azo;
-  
-  // Magnetometer
-  mag.getHeading(&mx, &my, &mz);
-  
-  // Barometer
-  baro.startReadTemperature(MS5611_SAMPLES_256);
-  delay(2);
-  t = baro.finishReadTemperature();
-  baro.startReadPressure(MS5611_SAMPLES_256);
-  delay(2);
-  p = baro.finishReadPressure();
-}
-
-void calibrateIMU() {
-  // Calibration assumes that the quadrocopter is on a flat surface during startup
-  Serial.println("Calibrating Sensors...");
-  gxo = 0; gyo = 0; gzo = 0;
-  readSensorsIMU();
-  
-  int64_t cnt = 256;
-  int64_t gxOffset = 0; int64_t gyOffset = 0; int64_t gzOffset = 0;
-  int64_t axOffset = 0; int64_t ayOffset = 0; int64_t azOffset = 0;
-  for (int i = 0; i < cnt; i++) {
-    readSensorsIMU();
-    gxOffset += gx; gyOffset += gy; gzOffset += gz;
-    axOffset += ax; ayOffset += ay; azOffset += az;
-  }
-  gxo = gxOffset / cnt; gyo = gyOffset / cnt; gzo = gzOffset / cnt;
-  axo = axOffset / cnt; ayo = ayOffset / cnt; azo = azOffset / cnt;
-}
-
 void setup() {
+    delay(500); // programmer creates garbage otherwise
+  
     // Pull SCL low to reset the bus
     pinMode(P1_6, OUTPUT);
     digitalWrite(P1_6, LOW);
-    delay(5);
-    
-    // configure Arduino LED for
-    pinMode(RED_LED, OUTPUT);
+    delay(1);
   
     // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
@@ -107,6 +67,8 @@ void setup() {
     // (38400 chosen because it works as well at 8MHz as it does at 16MHz, but
     // it's really up to you depending on your project)
     Serial.begin(38400);
+
+    // initialize device
     Serial.println();
     Serial.println("Initializing I2C devices...");
     mpu.reset();
@@ -122,32 +84,53 @@ void setup() {
     Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
     Serial.println(mag.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");    
     Serial.println(baro.testConnection() ? "MS5611 connection successful" : "MS5611 connection failed");    
-    for (int i = 0; i < 3; i++) loop(); // display uncalibrated values
-    
-    // Calibrate defaults
-    calibrateIMU();
+
+    for (int i = 0; i < 10; i++) loop();
+    delay(5000);
+    // configure Arduino LED for
+    pinMode(LED_PIN, OUTPUT);
 }
 
-
-
 void loop() {
-    readSensorsIMU();
-    
-    Serial.print("data\t");
-    Serial.print(ax); Serial.print("\t");
-    Serial.print(ay); Serial.print("\t");
-    Serial.print(az); Serial.print("\t");
-    Serial.print(gx); Serial.print("\t");
-    Serial.print(gy); Serial.print("\t");
-    Serial.print(gz); Serial.print("\t");
-    Serial.print(mx); Serial.print("\t");
-    Serial.print(my); Serial.print("\t");
-    Serial.print(mz); Serial.print("\t");
-    Serial.print(t); Serial.print("\t");
-    Serial.print(p); Serial.print("\t");
-    Serial.println();
-    
+    // read raw accel/gyro measurements from device
+    mpu.getMotion6(&ax, &ay, &az,  &gx, &gy, &gz);
+    mag.getHeading(&mx, &my, &mz);
+    baro.startReadTemperature(MS5611_SAMPLES_256);
+    delay(1);
+    float t = baro.finishReadTemperature();
+    baro.startReadPressure(MS5611_SAMPLES_256);
+    delay(1);
+    float p = baro.finishReadPressure();
+
+
+    #ifdef OUTPUT_READABLE_mpu
+        // display tab-separated accel/gyro x/y/z values
+        Serial.print("data\t");
+        Serial.print(ax); Serial.print("\t");
+        Serial.print(ay); Serial.print("\t");
+        Serial.print(az); Serial.print("\t");
+        Serial.print(gx); Serial.print("\t");
+        Serial.print(gy); Serial.print("\t");
+        Serial.print(gz); Serial.print("\t");
+        Serial.print(mx); Serial.print("\t");
+        Serial.print(my); Serial.print("\t");
+        Serial.print(mz); Serial.print("\t");
+        Serial.print(t); Serial.print("\t");
+        Serial.print(p); Serial.print("\t");
+        Serial.println();
+    #endif
+
+    #ifdef OUTPUT_BINARY_mpu
+        //Serial.write((uint8_t)(ax & 0xFF));Serial.write((uint8_t)(ax >> 8)); 
+        //Serial.write((uint8_t)(ay & 0xFF));Serial.write((uint8_t)(ay >> 8)); 
+        //Serial.write((uint8_t)(az & 0xFF));Serial.write((uint8_t)(az >> 8)); 
+        Serial.write((uint8_t)(gx & 0xFF));Serial.write((uint8_t)(gx >> 8)); 
+        Serial.write((uint8_t)(gy & 0xFF));Serial.write((uint8_t)(gy >> 8)); 
+        Serial.write((uint8_t)(gz & 0xFF));Serial.write((uint8_t)(gz >> 8)); 
+        Serial.write('\n');
+    #endif
+
     // blink LED to indicate activity
     blinkState = !blinkState;
-    digitalWrite(RED_LED, blinkState);
+    digitalWrite(LED_PIN, blinkState);
 }
