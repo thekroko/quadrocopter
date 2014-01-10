@@ -1,43 +1,19 @@
-// I2C device class (I2Cdev) demonstration Arduino sketch for MPU6050 class
-// 10/7/2011 by Jeff Rowberg <jeff@rowberg.net>
-// Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
-//
-// Changelog:
-//      2013-05-08 - added multiple output formats
-//                 - added seamless Fastwire support
-//      2011-10-07 - initial release
-
-/* ============================================
-I2Cdev device library code is placed under the MIT license
-Copyright (c) 2011 Jeff Rowberg
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-===============================================
-*/
-
 #define I2CDEV_IMPLEMENTATION I2CDEV_ARDUINO_WIRE
 #include "Wire.h"
+#include "Servo.h"
 #include "I2Cdev.h"
 #include "MPU6050.h"
 #include "HMC5883L.h"
 #include "MS5611.h"
 
+// Pinout
+#define LED RED_LED
+#define MOTOR_TL P1_4
+#define MOTOR_TR P1_5
+#define MOTOR_BL P2_0
+#define MOTOR_BR P2_1
+
+Servo motorTL, motorTR, motorBL, motorBR; 
 MPU6050 mpu;
 HMC5883L mag;
 MS5611 baro;
@@ -54,7 +30,7 @@ float t, p;
 
 bool blinkState = false;
 
-// IMU helpers
+// ------------------ IMU helpers
 void readSensorsIMU() {
   // Gyroscope & Accelerometer
   mpu.getMotion6(&ax, &ay, &az,  &gx, &gy, &gz);
@@ -91,6 +67,15 @@ void calibrateIMU() {
   axo = axOffset / cnt; ayo = ayOffset / cnt; azo = azOffset / cnt;
 }
 
+// ------------------ Motor helpers
+void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values in permill
+  motorTL.writeMicroseconds(tl + 1000L);
+  motorTR.writeMicroseconds(tr + 1000L);
+  motorBL.writeMicroseconds(bl + 1000L);
+  motorBR.writeMicroseconds(br + 1000L);
+}
+
+// -----------------------------------
 void setup() {
     // Pull SCL low to reset the bus
     pinMode(P1_6, OUTPUT);
@@ -108,7 +93,7 @@ void setup() {
     // it's really up to you depending on your project)
     Serial.begin(38400);
     Serial.println();
-    Serial.println("Initializing I2C devices...");
+    Serial.println("Initializing IMU...");
     mpu.reset();
     delay(50);
     mpu.initialize();
@@ -126,9 +111,16 @@ void setup() {
     
     // Calibrate defaults
     calibrateIMU();
+    
+    // Initialize Servos
+    Serial.println("Initializing motors...");
+    motorTL.attach(MOTOR_TL); motorTR.attach(MOTOR_TR); motorBL.attach(MOTOR_BL); motorBR.attach(MOTOR_BR);
+    setMotors(0, 0, 0, 0);
+    delay(500);
+    setMotors(100, 100, 100, 100); // 10%
+    delay(500);
+    setMotors(0, 0, 0, 0);
 }
-
-
 
 void loop() {
     readSensorsIMU();
@@ -146,6 +138,15 @@ void loop() {
     Serial.print(t); Serial.print("\t");
     Serial.print(p); Serial.print("\t");
     Serial.println();
+    
+    // Handle input (only 1 char.tick!)
+    if (Serial.available() > 0) {
+      uint8_t cmd = Serial.read();
+      if (cmd >= '0' && cmd <= '9') {
+        uint16_t speed = (uint16_t)(cmd - '0') * 111;
+        setMotors(speed, speed, speed, speed);
+      } else if (cmd == ' ') setMotors(0, 0, 0, 0);
+    }
     
     // blink LED to indicate activity
     blinkState = !blinkState;
