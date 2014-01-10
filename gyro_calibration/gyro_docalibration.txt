@@ -1,0 +1,96 @@
+==================================================
+gyroscope calibration functions 01
+==================================================
+= Copyright (c) Davide Gironi, 2012              =
+= http://davidegironi.blogspot.it/               =
+==================================================
+
+This Python script implements a simple Gyroscope calibration routine to
+estimate offset and gain calibration values.
+
+To calibrate offset we just leave gyroscope in a stable position.
+To correct gain, this script do not use a calibrated rotation platform.
+I use an integration method. User must rotate it in 6 differenct way (see sheet provided)
+for a fixed angle, i use 90 degrees, cause i can do it with a simple calibration
+platiform (a cube), but greater angles (3600) would bring to better calibration.
+The rotation plane of the gyroscope have to be parallel to the requested rotation,
+so try to be precise placing the sensor over a rotation platform, and rotating it.
+During every rotation the script collect raw values.
+Integrating those values gives use the raw total values for the angle formed.
+Because we fixed the angle we should estimate the gain factor for the raw values.
+I sense the rotation stop evaluating raw values, a better way should be adding
+stop sensors.
+I suggest to repeat calibration more than one time, cause small rotation error
+can lead to calibration error.
+
+Once you obtain those values you can get calibrated data by applying this formula:
+x_calibrated = (x_raw-offsetx) / gainx
+y_calibrated = (y_raw-offsety) / gainy
+z_calibrated = (z_raw-offsetz) / gainz
+
+To obtain values, run this script and follow the instructions, a calibration
+sheet is provived to help you directing the sensor.
+
+If you run your sensor in a big range of temperature you should also consider
+a calibration dependent to temperature too.
+You can run the script function that compute temperature compensation values.
+cool down you chip, then launch the script, while the sensor come back to ambient
+temperature, this script collect values, then compute linear regression to find
+suitable temperature compensation values.
+Now, given a tempdelta, that is a temperature delta difference from the sensor start time
+tempdelta = actualtemp - starttimetemp
+The calibrated axis would became:
+x_calibrated = (x_raw-((tempcompx*tempdelta) + offsetx)) / gainx
+y_calibrated = (y_raw-((tempcompy*tempdelta) + offsety)) / gainy
+z_calibrated = (z_raw-((tempcompz*tempdelta) + offsetz)) / gainz
+
+You may repeat those tests a few times to get better results.
+
+On the microcontroller side you have to setup a function that print out to UART
+raw values read from your chip.
+Given 2 bytes (int16_t) variables for every axis, output the LSB and then MSB
+byte ((uint8_t)(int16_t>>0) + (uint8_t)(int16_t>>8)), follow by a '\n' char .
+
+An avr-gcc snippet:
+---
+int16_t raw_value_x_axis = 0;
+int16_t raw_value_y_axis = 0;
+int16_t raw_value_z_axis = 0;
+for(;;) {
+	//wait for the input request
+	while(uart_read_byte() != 0x20);
+	//get raw data
+	raw_value_x_axis = read_x_axis_raw_data();
+	raw_value_y_axis = read_y_axis_raw_data();
+	raw_value_z_axis = read_z_axis_raw_data();
+	//send raw data
+	uart_send_byte(raw_value_x_axis);
+	uart_send_byte(raw_value_x_axis>>8);
+	uart_send_byte(raw_value_y_axis);
+	uart_send_byte(raw_value_y_axis>>8);
+	uart_send_byte(raw_value_z_axis);
+	uart_send_byte(raw_value_z_axis>>8);
+	//send end
+	uart_send_byte('\n');
+}
+---
+
+An Arduino snippet:
+---
+int16_t ax, ay, az;
+void loop() {
+	//wait for the input request
+    while(Serial.read() != 0x20);
+    //get raw data
+    chip.getrawdata(&ax, &ay, &az);
+    //send raw data
+    Serial.write(ax); 
+    Serial.write(ax>>8);
+    Serial.write(ay); 
+    Serial.write(ay>>8);
+    Serial.write(az); 
+    Serial.write(az>>8);
+	//send end
+    Serial.write('\n');
+}
+---
