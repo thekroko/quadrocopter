@@ -1,4 +1,13 @@
 #!/bin/sh
+# Initializes the RaspiCopter completely
+
+# Kill unecessary software
 killall X
+
+# Prepare our UART
 stty -F /dev/ttyAMA0 115200 raw
+
+# Prepare our I2C devices
 modprobe i2c-dev
+./initIMU # this will put the MPU6050 into 6-DOF DMP mode
+
