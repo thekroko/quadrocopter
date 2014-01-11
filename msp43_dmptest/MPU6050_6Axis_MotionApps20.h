@@ -530,7 +530,7 @@ bool MPU6050::dmpPacketAvailable() {
 // uint8_t MPU6050::dmpSendQuantizedAccel(uint_fast16_t elements, uint_fast16_t accuracy);
 // uint8_t MPU6050::dmpSendEIS(uint_fast16_t elements, uint_fast16_t accuracy);
 
-uint8_t MPU6050::dmpGetAccel(int32_t *data, const uint8_t* packet) {
+/*uint8_t MPU6050::dmpGetAccel(int32_t *data, const uint8_t* packet) {
     // TODO: accommodate different arrangements of sent data (ONLY default supported now)
     if (packet == 0) packet = dmpPacketBuffer;
     data[0] = (((int32_t)packet[28] << 24) + ((int32_t)packet[29] << 16) + ((int32_t)packet[30] << 8) + packet[31]);
@@ -553,7 +553,7 @@ uint8_t MPU6050::dmpGetAccel(VectorInt16 *v, const uint8_t* packet) {
     v -> y = ((int16_t)packet[32] << 8) + packet[33];
     v -> z = ((int16_t)packet[36] << 8) + packet[37];
     return 0;
-}
+}*/
 uint8_t MPU6050::dmpGetQuaternion(int32_t *data, const uint8_t* packet) {
     // TODO: accommodate different arrangements of sent data (ONLY default supported now)
     if (packet == 0) packet = dmpPacketBuffer;
