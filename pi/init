@@ -1,0 +1,4 @@
+#!/bin/sh
+killall X
+stty -F /dev/ttyAMA0 115200 raw
+modprobe i2c-dev
