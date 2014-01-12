@@ -1,18 +1,22 @@
 // UART Commands:
-//   [0x00] 0xXX   0xXX   0xXX   0xXX   0xFF    Who am I? Returns "MSP430"
-//   [0x01] 0xXX   0xXX   0xXX   0xXX   0xFF    Read Yaw/Pitch/Roll
-//   [0x02] 0xXX   0xXX   0xXX   0xXX   0xXX    Read Mode
+//   [0x00] .........................   0xFF    Who am I? Returns "MSP430"
+//   [0x01] .........................   0xFF    Read Yaw/Pitch/Roll
+//   [0x02] .........................   0xFF    Read Mode
 
-//   [0x0A] 0xXX   0xXX   0xXX   0xXX   0xFF    Init DMP and I2C (Required for most other commands)
+//   [0x0A] .........................   0xFF    Init DMP and I2C (Required for most other commands)
+//   [0x0B] pid    val#  ............   0xFF    Change PID register
+//   [0x0C] .........4-float.........   0xFF    Change PID value
+//   [0x0D] .........................   0xFF    Print PID values
 //   [0x0F] 0xB5   0x3A   0x79   0x00   0xFF    Reset controller
 
-//   [0x10] 0xTL   0xTR   0xBL   0xBR   0xFF    Set Motor Speed directly
+//   [0x10] tl     tr     bl     br     0xFF    Set Motor Speed directly
 
-//   [0x20] 0xXX   0xXX   0xXX   0xXX   0xFF    Set Mode: Rate Control
-//   [0x21] 0xXX   0xXX   0xXX   0xXX   0xFF    Print target Y/P/R rates
-//   [0x22] float  ..................   0xFF    Set Rate control Yaw 
-//   [0x23] float  ..................   0xFF    Set Rate control Pitch
-//   [0x24] float  ..................   0xFF    Set Rate control Roll
+//   [0x20] .........................   0xFF    Set Mode: Rate Control
+//   [0x21] .........................   0xFF    Print target Y/P/R rates
+//   [0x22] .........4-float.........   0xFF    Set Rate control Yaw 
+//   [0x23] .........4-float.........   0xFF    Set Rate control Pitch
+//   [0x24] .........4-float.........   0xFF    Set Rate control Roll
+//   [0x25] .........4-float.........   0xFF    Set Rate control Motor %
 
 // Pinout
 #define LED RED_LED
@@ -34,6 +38,7 @@
 #include "Wire.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "Servo.h"
+#include "pid.h"
 
 MPU6050 mpu;
 Servo motorTL, motorTR, motorBL, motorBR; 
@@ -55,19 +60,27 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];          // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 // pid stuff
-float targetYPR[3];
-
-union BinaryFloat { 
-      float num; 
-      uint32_t numi; 
-};
+#define R_YAW    0
+#define R_PITCH  1
+#define R_ROLL   2
+float targetYPRS[4];
+PID pids[3];
+uint8_t selectedPIDRegister = 0;
+uint8_t selectedPIDValue = 0;
 
 // ------------------ Motor helpers
-void setMotors(uint8_t tl, uint8_t tr, uint8_t bl, uint8_t br) { // values in 0-2551
+void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values in 0-255*3L
   motorTL.writeMicroseconds((uint16_t)tl*3L + 1235L);
   motorTR.writeMicroseconds((uint16_t)tr*3L + 1235L);
   motorBL.writeMicroseconds((uint16_t)bl*3L + 1235L);
   motorBR.writeMicroseconds((uint16_t)br*3L + 1235L);
+}
+
+uint16_t makeSpeed(float speed) {
+  if (speed >= 100.0) return 254*3L;
+  if (speed <= 0.0) return 0;
+  speed = speed * 254.0 * 3.0 / 100.0;
+  return (uint16_t)speed;
 }
 
 // -----------------------------------
@@ -91,7 +104,7 @@ void setup() {
     // Calibrate?
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
-      setMotors(254, 254, 254, 254);
+      setMotors(254*3L, 254*3L, 254*3L, 254*3L);
       delay(5000);
     } else Serial.println("INIT Restart after reset");
     
@@ -128,6 +141,27 @@ void handleIMU() {
      ypr[1] *= 180/M_PI;
      ypr[2] *= 180/M_PI;
   }
+}
+
+void handlePIDs() {
+  if (mode <= MODE_RAW) return;
+  
+  // Stabilizing control
+  // TODO: Stable control
+
+  // Rate control
+  float yawCmd = updatePID(pids[R_YAW], ypr[0], targetYPRS[0]);
+  float pitchCmd = updatePID(pids[R_PITCH], ypr[1], targetYPRS[1]);
+  float rollCmd = updatePID(pids[R_ROLL], ypr[2], targetYPRS[2]);
+  float motorSpeed = targetYPRS[3];
+  
+  // Set motor speeds
+  setMotors(
+   /* TL */ makeSpeed(motorSpeed + yawCmd - rollCmd - pitchCmd),
+   /* TR */ makeSpeed(motorSpeed - yawCmd + rollCmd - pitchCmd),
+   /* BL */ makeSpeed(motorSpeed + yawCmd - rollCmd + pitchCmd),
+   /* BR */ makeSpeed(motorSpeed - yawCmd + rollCmd + pitchCmd)
+  );
 }
 
 void handleInput() {
@@ -174,6 +208,34 @@ void handleInput() {
       } else Serial.println("IMU not found");
       break;
       
+     //   [0x0B] pid    val#  ............   0xFF    Change PID register
+    case 0x0B:
+      selectedPIDRegister = cmd[1];
+      selectedPIDValue = cmd[2];
+      Serial.print("PIDSEL "); Serial.print(selectedPIDRegister); Serial.println(selectedPIDValue);
+      break;
+      
+    //   [0x0C] float...,................   0xFF    Change PID value
+    case 0x0C: {
+      float* p = (float*)&pids[selectedPIDRegister];
+      memcpy(&p[selectedPIDValue], &cmd[1], sizeof(float));
+      break;
+    }
+      
+    //   [0x0D] .........................   0xFF    Print PID values
+    case 0x0D: {
+      Serial.print("PIDDUMP ");
+      Serial.print(selectedPIDRegister);
+      float* p = (float*)&pids[selectedPIDRegister];
+      for (int i = 0; i < sizeof(PID); i += sizeof(float)) {
+        Serial.print(' ');
+        Serial.print(p[0]);
+        p++;
+      }
+      Serial.println();
+      break;
+    }
+      
     //   [0x0F] 0xB5   0x3A   0x79   0x00   0xFF    Reset controller
     case 0x0F:
       if (cmd[1] != 0xB5 || cmd[2] != 0x3A || cmd[3] != 0x79 || cmd[4] != 0x00) {
@@ -189,7 +251,7 @@ void handleInput() {
     // Mode: Raw Motor Speed
     case 0x10:
       mode = MODE_RAW;
-      setMotors(cmd[1], cmd[2], cmd[3], cmd[4]);
+      setMotors((uint16_t)cmd[1]*3L, (uint16_t)cmd[2]*3L, (uint16_t)cmd[3]*3L, (uint16_t)cmd[4]*3L);
       break;
       
     //   [0x20] 0xXX   0xXX   0xXX   0xXX   0xFF    Set Mode: Rate Control
@@ -199,26 +261,26 @@ void handleInput() {
     
     //   [0x21] 0xXX   0xXX   0xXX   0xXX   0xFF    Print target Y/P/R rates
     case 0x21:
-      Serial.print("RATEYPR ");
-      for (int i = 0; i < 3; i++) {
-        Serial.print(targetYPR[i]); Serial.print(i == 2 ? '\n' : ' '); 
+      Serial.print("RATE_YPRS ");
+      for (int i = 0; i < 4; i++) {
+        Serial.print(targetYPRS[i]); Serial.print(i == 3 ? '\n' : ' '); 
       }
       break;
       
     //   [0x22] float  ..................   0xFF    Set Rate control Yaw 
     //   [0x23] float  ..................   0xFF    Set Rate control Pitch
     //   [0x24] float  ..................   0xFF    Set Rate control Roll
-    case 0x22: case 0x23: case 0x24:
-      //targetYPR[cmd[0]-0x22] = *(float*)&cmd[1];
-      BinaryFloat bf;
-      bf.data
-      targetYPR[cmd[0]-0x22] = *(float*)(&cmd+1);
+    //   [0x25] float  ..................   0xFF    Set Rate control Motor speed
+    case 0x22: case 0x23: case 0x24: case 0x25:
+      int destIndex = cmd[0] - 0x22;
+      memcpy(&targetYPRS[destIndex], &cmd[1], sizeof(float));
       break;
   }
 }
 
 void loop() {
   handleIMU();
+  handlePIDs();
   handleInput();
   if (tick++ == 0) {
     ledState = !ledState;
