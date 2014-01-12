@@ -1,6 +1,21 @@
 #!/bin/sh
 # Sends a simple command to the MSP430  controller
-if [ -z "$1" ]; then echo "$0 00 11 22 33" >&2; exit 1; fi
-STR=
-for i in $@ FF; do STR=${STR}$(echo -en "\x$i") ; done
-echo -n "${STR}" > /dev/ttyAMA0
+if [ -z "$1" ]; then 
+  echo "$0 set 0x00 [...] " >&2; 
+  echo "$0 setpid kP kI kD iMin iMax oMin oMax" >&2; 
+  exit 1;
+ fi
+
+CMD="$1"
+shift
+
+# Parse command
+case "$CMD" in
+  "set")
+    DATA="$@"
+    for i in $(seq $# 4); do DATA="$DATA 00"; done
+    ;;
+esac
+
+# Execute
+echo "$DATA 0xFF" | xxd -r > /dev/ttyAMA0

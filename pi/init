@@ -1,13 +1,14 @@
 #!/bin/sh
 # Initializes the RaspiCopter completely
 
-# Kill unecessary software
-killall X
-
 # Prepare our UART
 stty -F /dev/ttyAMA0 115200 raw
 
-# Prepare our I2C devices
+# Init our low-level control
 modprobe i2c-dev
+./msp 0x0F 0xB5 0x3A 0x79 0x00  # reset our MSP430
+sleep 0.5s
 ./initIMU # this will put the MPU6050 into 6-DOF DMP mode
+./msp 0x0A # this initializes the MPU
+
 
