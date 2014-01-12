@@ -49,7 +49,7 @@
 #endif
 
 #ifndef TWI_BUFFER_LENGTH
-#define TWI_BUFFER_LENGTH 16
+#define TWI_BUFFER_LENGTH 10
 #endif
 
 

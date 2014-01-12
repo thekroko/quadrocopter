@@ -1,11 +1,14 @@
 #include <stdint.h>
 
 // PID magic
-struct PID {
+struct PIDConfig {
   float kP, kI, kD;
   int8_t minI, maxI, minO, maxO;
+};
+
+struct PIDData {
   float lastInput;
   float errorSum;
 };
 
-float updatePID(PID pid, float input, float target);
+float updatePID(PIDConfig pidc, PIDData pid, float input, float target);

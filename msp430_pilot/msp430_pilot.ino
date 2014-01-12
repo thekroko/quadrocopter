@@ -25,6 +25,7 @@
 #define MOTOR_BL P2_0
 #define MOTOR_BR P2_1
 #define I2CDEV_IMPLEMENTATION I2CDEV_ARDUINO_WIRE
+#define TWI_BUFFER_LENGTH 10
 
 #define CMD_SIZE 5
 #define DMP_PACKET_SIZE 21 // 2x that, but we can ignore the 2nd part
@@ -55,8 +56,6 @@ uint16_t fifoCount;            // count of all bytes currently in FIFO
 uint8_t fifoBuffer[DMP_PACKET_SIZE];  // FIFO storage buffer
 
 // orientation/motion vars
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 // pid stuff
@@ -64,7 +63,8 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 #define R_PITCH  1
 #define R_ROLL   2
 float targetYPRS[4];
-PID pids[3];
+PIDConfig pidC[3];
+PIDData pidD[3];
 uint8_t selectedPIDRegister = 0;
 uint8_t selectedPIDValue = 0;
 
@@ -91,7 +91,8 @@ void setup() {
     // Initialize all floats (printing crashes device otherwise)
     for (int i = 0; i < 3; i++) ypr[i] = i+1;
     for (int i = 0; i < 4; i++) targetYPRS[i] = i+1;
-    memset(&pids, 0, sizeof(PID) * 3);
+    memset(&pidC, 0, sizeof(PIDConfig) * 3);
+    memset(&pidD, 0, sizeof(PIDData) * 3);
     
     // Make sure RX has a pullup (we get random interference otherwise)
     pinMode(P1_1, INPUT_PULLUP);
@@ -139,6 +140,8 @@ inline void handleIMU() {
     Serial.println(mpuIntStatus);
   } else if (mpuIntStatus & 0x02) { // data ready
      mpu.getFIFOBytes(fifoBuffer, DMP_PACKET_SIZE);
+     Quaternion q;           // [w, x, y, z]         quaternion container
+     VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
      mpu.dmpGetGravity(&gravity, &q);
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
@@ -153,9 +156,9 @@ inline void handlePIDs() {
   if (mode <= MODE_RAW) return;
   
   // Rate control
-  float yawCmd = updatePID(pids[R_YAW], ypr[0], targetYPRS[0]);
-  float pitchCmd = updatePID(pids[R_PITCH], ypr[1], targetYPRS[1]);
-  float rollCmd = updatePID(pids[R_ROLL], ypr[2], targetYPRS[2]);
+  float yawCmd =   updatePID(pidC[R_YAW],   pidD[R_YAW],   ypr[0], targetYPRS[0]);
+  float pitchCmd = updatePID(pidC[R_PITCH], pidD[R_PITCH], ypr[1], targetYPRS[1]);
+  float rollCmd =  updatePID(pidC[R_ROLL],  pidD[R_ROLL],  ypr[2], targetYPRS[2]);
   float motorSpeed = targetYPRS[3];
   
   // Set motor speeds
@@ -224,7 +227,7 @@ inline void handleInput() {
       
     //   [0x0C] float...,................   0xFF    Set PID value
     case 0x0C: {
-      float* p = (float*)(&pids[selectedPIDRegister]);
+      float* p = (float*)(&pidC[selectedPIDRegister]);
       memcpy(&p[selectedPIDValue], &cmd[1], sizeof(float));
       break;
     }
@@ -234,12 +237,7 @@ inline void handleInput() {
       Serial.print("PIDDUMP ");
       Serial.print(selectedPIDRegister);
       Serial.print(':');
-      PID pid = pids[selectedPIDRegister];
-      /*float* p = (float*)(&pid) ;
-      for (int i = 0; i < sizeof(PID)/sizeof(float) - 4; i++) {
-        Serial.print(' ');
-        Serial.print(p[i]);
-      }*/
+      PIDConfig pid = pidC[selectedPIDRegister];
       Serial.print(' '); Serial.print(pid.kP);
       Serial.print(' '); Serial.print(pid.kI);
       Serial.print(' '); Serial.print(pid.kD);
