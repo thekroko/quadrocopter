@@ -7,7 +7,7 @@ CMN_OBJS = I2Cdev.o MPU6050.o
 DMP_OBJS =  initIMU.o
 CXXFLAGS = -DDMP_FIFO_RATE=3 -Wall -g -O2 `pkg-config gtkmm-3.0 --cflags --libs`
 
-# = 50hz
+# = 50.0hz
 # This very last 0x01 WAS a 0x09, which drops the FIFO rate down to 20 Hz. 0x07 is 25 Hz,
 # 0x01 is 100Hz. Going faster than 100Hz (0x00=200Hz) tends to result in very noisy data.
 # DMP output frequency is calculated easily using this equation: (200Hz / (1 + value))

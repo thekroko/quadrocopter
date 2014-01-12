@@ -1,21 +1,64 @@
 #!/bin/sh
 # Sends a simple command to the MSP430  controller
 if [ -z "$1" ]; then 
-  echo "$0 set 0x00 [...] " >&2; 
-  echo "$0 setpid kP kI kD iMin iMax oMin oMax" >&2; 
+  echo "$0 write 0x00 [...] " >&2; 
+  echo "$0 reset" >&2; 
+  echo "$0 test" >&2; 
+  echo "$0 initdmp" >&2; 
+  echo "$0 motors= TL TR BL BR" >&2; 
+  echo "$0 mode/mode= id" >&2; 
+  echo "$0 yprerr" >&2; 
+  echo "$0 ypr/typr" >&2; 
+  echo "$0 typr= yaw pitch roll power" >&2; 
+  echo "$0 pid= id kP kI kD iMin iMax oMin oMax" >&2; 
+  echo "$0 pid id" >&2; 
   exit 1;
  fi
+
+function msp() {
+  # Execute
+  echo $@
+  echo "0xFF $@" | xxd -r > /dev/ttyAMA0
+}
+function ihex() {
+  echo -en '0x'
+  printf "%02X" $@ | tail -c 2
+}
 
 CMD="$1"
 shift
 
 # Parse command
 case "$CMD" in
-  "set")
+  "test")      msp "0x00 0x00 0x00 0x00 0x00";;
+  "ypr")       msp "0x01 0x00 0x00 0x00 0x00";;
+  "yprl")      while [ 1 ]; do msp "0x01 0x00 0x00 0x00 0x00"; done ;;
+  "mode")      msp "0x02 0x00 0x00 0x00 0x00";;
+  "initdmp")   msp "0x0A 0x00 0x00 0x00 0x00";;
+  "reset")     msp "0x0F 0xB5 0x3A 0x79 0x00";;
+  "motors=")   msp "0x10 0x$1 0x$2 0x$3 0x$4";;
+  "mode=")     msp "0x20 0x0$1 0x00 0x00 0x00";;
+  "yprerr")    msp "0x20 0x00 0x20 0x00 0x00";;
+  "typr")      msp "0x21 0x00 0x00 0x00 0x00";;
+  "typr=")     msp "0x22 $(./utils/fl2b $1)"
+               msp "0x23 $(./utils/fl2b $2)"
+               msp "0x24 $(./utils/fl2b $3)"
+               msp "0x25 $(./utils/fl2b $4)"
+               msp "0x21 0x00 0x00 0x00 0x00";;
+  "pid")       msp "0x0B 0x${1}0 0x00 0x00 0x00"
+               msp "0x0D 0x00 0x00 0x00 0x00";;
+  "pid=")      msp "0x0B 0x${1}0 0x00 0x00 0x00"
+               msp "0x0C $(./utils/fl2b $2)"
+               msp "0x0B 0x${1}1 0x01 0x00 0x00"
+               msp "0x0C $(./utils/fl2b $3)"
+               msp "0x0B 0x${1}2 0x02 0x00 0x00"
+               msp "0x0C $(./utils/fl2b $4)"
+               msp "0x0B 0x${1}3 0x02 0x00 0x00"
+               msp "0x0C $(ihex $5) $(ihex $6) $(ihex $7) $(ihex $8)";;
+
+  "write")
     DATA="$@"
     for i in $(seq $# 4); do DATA="$DATA 00"; done
+    msp $DATA
     ;;
 esac
-
-# Execute
-echo "$DATA 0xFF" | xxd -r > /dev/ttyAMA0
