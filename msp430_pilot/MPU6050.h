@@ -981,7 +981,7 @@ class MPU6050 {
 
     private:
         uint8_t devAddr;
-        uint8_t buffer[8];
+        uint8_t buffer[2 /* this is terrible ... 14*/];
 };
 
 #endif /* _MPU6050_H_ */
