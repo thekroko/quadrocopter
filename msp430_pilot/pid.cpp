@@ -15,7 +15,7 @@ float updatePID(PID pid, float input, float target) {
   
   // Calculate output
   float output = pid.kP * error + ddt_error + pid.errorSum;
-  if (output < pid.minOut) return pid.minOut;
-  else if (output > pid.maxOut) return pid.maxOut;
+  if (output < pid.minO) return pid.minO;
+  else if (output > pid.maxO) return pid.maxO;
   else return output;
 }
