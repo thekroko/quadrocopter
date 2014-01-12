@@ -1,3 +1,19 @@
+// UART Commands:
+//   [0x00] 0xXX   0xXX   0xXX   0xXX   0xFF    Who am I? Returns "MSP430"
+//   [0x01] 0xXX   0xXX   0xXX   0xXX   0xFF    Read Yaw/Pitch/Roll
+//   [0x02] 0xXX   0xXX   0xXX   0xXX   0xXX    Read Mode
+
+//   [0x0A] 0xXX   0xXX   0xXX   0xXX   0xFF    Init DMP and I2C (Required for most other commands)
+//   [0x0F] 0xB5   0x3A   0x79   0x00   0xFF    Reset controller
+
+//   [0x10] 0xTL   0xTR   0xBL   0xBR   0xFF    Set Motor Speed directly
+
+//   [0x20] 0xXX   0xXX   0xXX   0xXX   0xFF    Set Mode: Rate Control
+//   [0x21] 0xXX   0xXX   0xXX   0xXX   0xFF    Print target Y/P/R rates
+//   [0x22] float  ..................   0xFF    Set Rate control Yaw 
+//   [0x23] float  ..................   0xFF    Set Rate control Pitch
+//   [0x24] float  ..................   0xFF    Set Rate control Roll
+
 // Pinout
 #define LED RED_LED
 #define MOTOR_TL P1_5
@@ -9,6 +25,10 @@
 #define CMD_SIZE 5
 #define DMP_PACKET_SIZE 42
 
+#define MODE_RAW     1
+#define MODE_RATE    2
+#define MODE_STABLE  3
+
 // Components
 #include "I2Cdev.h"
 #include "Wire.h"
@@ -19,6 +39,11 @@ MPU6050 mpu;
 Servo motorTL, motorTR, motorBL, motorBR; 
 
 // Global State
+#define __no_init    __attribute__ ((section (".noinit"))) 
+#define RESET_MAGIC 0xAC19
+__no_init uint16_t reset;
+uint8_t tick = 0;
+uint8_t mode = MODE_RAW;
 bool ledState = false;
 bool dmpInitialized = false;   // true if the DMP has been flashed
 uint16_t fifoCount;            // count of all bytes currently in FIFO
@@ -27,10 +52,18 @@ uint8_t fifoBuffer[DMP_PACKET_SIZE];  // FIFO storage buffer
 // orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorFloat gravity;    // [x, y, z]            gravity vector
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+float ypr[3];          // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+// pid stuff
+float targetYPR[3];
+
+union BinaryFloat { 
+      float num; 
+      uint32_t numi; 
+};
 
 // ------------------ Motor helpers
-void setMotors(uint8_t tl, uint8_t tr, uint8_t bl, uint8_t br) { // values in permill
+void setMotors(uint8_t tl, uint8_t tr, uint8_t bl, uint8_t br) { // values in 0-2551
   motorTL.writeMicroseconds((uint16_t)tl*3L + 1235L);
   motorTR.writeMicroseconds((uint16_t)tr*3L + 1235L);
   motorBL.writeMicroseconds((uint16_t)bl*3L + 1235L);
@@ -39,6 +72,9 @@ void setMotors(uint8_t tl, uint8_t tr, uint8_t bl, uint8_t br) { // values in pe
 
 // -----------------------------------
 void setup() {
+    bool wasReset = (reset == RESET_MAGIC);
+    reset = 0;
+    
     // Make sure RX has a pullup (we get random interference otherwise)
     pinMode(P1_1, INPUT_PULLUP);
     Serial.begin(115200);
@@ -50,10 +86,15 @@ void setup() {
     digitalWrite(LED, LOW);
     
     // Initialize Servos
-    Serial.println("INIT Calibrating ESCs..");
     motorTL.attach(MOTOR_TL); motorTR.attach(MOTOR_TR); motorBL.attach(MOTOR_BL); motorBR.attach(MOTOR_BR);
-    setMotors(254, 254, 254, 254);
-    delay(5000);
+
+    // Calibrate?
+    if (!wasReset) {
+      Serial.println("INIT Calibrating ESCs..");
+      setMotors(254, 254, 254, 254);
+      delay(5000);
+    } else Serial.println("INIT Restart after reset");
+    
     setMotors(0, 0, 0, 0);
     delay(2000);
     
@@ -74,7 +115,7 @@ void handleIMU() {
   if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
     // reset so we can continue cleanly
     mpu.resetFIFO();
-    Serial.print(F("FIFO overflow! "));
+    Serial.print(F("ERR FIFO overflow! "));
     Serial.print(fifoCount);
     Serial.print(' ');
     Serial.println(mpuIntStatus);
@@ -83,17 +124,14 @@ void handleIMU() {
      mpu.dmpGetQuaternion(&q, fifoBuffer);
      mpu.dmpGetGravity(&gravity, &q);
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-     Serial.print("ypr\t");
-     Serial.print(ypr[0] * 180/M_PI);
-     Serial.print("\t");
-     Serial.print(ypr[1] * 180/M_PI);
-     Serial.print("\t");
-     Serial.println(ypr[2] * 180/M_PI);
+     ypr[0] *= 180/M_PI;
+     ypr[1] *= 180/M_PI;
+     ypr[2] *= 180/M_PI;
   }
 }
 
 void handleInput() {
-  // Handle input. We assume a fixed command width of 5 byte, terminated with 0xFF (=6 byte total)
+  // Read input. We assume a fixed command width of 5 byte, terminated with 0xFF (=6 byte total)
   if (Serial.available() < 6) return; // not yet ready
   uint8_t cmd[6];
   for (int i = 0; i < 5; i++) {
@@ -105,21 +143,76 @@ void handleInput() {
     
   // Process the command
   switch (cmd[0]) {
-    case 0x00: // NOP
+    // Who am I?
+    case 0x00:
+      Serial.println("MSP430");
       break;
-    case 0x01: // DMP/I2C init
+      
+    // Read Yaw/Pitch/Roll
+    case 0x01: 
+      Serial.print("YPR ");
+      for (int i = 0; i < 3; i++) {
+        Serial.print(ypr[i]); Serial.print(i == 2 ? '\n' : ' ');      
+      }
+      break;
+      
+    // Read Mode
+    case 0x02:
+      Serial.print("MODE "); Serial.println(mode);
+      break;
+      
+
+    // Init DMP & I2C
+    case 0x0A:
       Serial.println("DMP init..");
       Wire.begin();
       dmpInitialized = mpu.testConnection();
       if (dmpInitialized) {
         mpu.resetFIFO();
+        mpu.getIntStatus();
         Serial.println("DMP ready");
-      } else Serial.println("DMP error");
+      } else Serial.println("IMU not found");
       break;
-    case 0xF0: // Motor speed test
-      // We have a valid motor speed...
+      
+    //   [0x0F] 0xB5   0x3A   0x79   0x00   0xFF    Reset controller
+    case 0x0F:
+      if (cmd[1] != 0xB5 || cmd[2] != 0x3A || cmd[3] != 0x79 || cmd[4] != 0x00) {
+        Serial.println("ERR wrong reset seq");
+        break;
+      }
+      reset = RESET_MAGIC;
+      Serial.println("RESET ");
+      Serial.flush();
+      WDTCTL = 0xFFFF; // Causes an Access Violation
+      break;
+      
+    // Mode: Raw Motor Speed
+    case 0x10:
+      mode = MODE_RAW;
       setMotors(cmd[1], cmd[2], cmd[3], cmd[4]);
-      Serial.print('+');
+      break;
+      
+    //   [0x20] 0xXX   0xXX   0xXX   0xXX   0xFF    Set Mode: Rate Control
+    case 0x20:
+      mode = MODE_RATE;
+      break;
+    
+    //   [0x21] 0xXX   0xXX   0xXX   0xXX   0xFF    Print target Y/P/R rates
+    case 0x21:
+      Serial.print("RATEYPR ");
+      for (int i = 0; i < 3; i++) {
+        Serial.print(targetYPR[i]); Serial.print(i == 2 ? '\n' : ' '); 
+      }
+      break;
+      
+    //   [0x22] float  ..................   0xFF    Set Rate control Yaw 
+    //   [0x23] float  ..................   0xFF    Set Rate control Pitch
+    //   [0x24] float  ..................   0xFF    Set Rate control Roll
+    case 0x22: case 0x23: case 0x24:
+      //targetYPR[cmd[0]-0x22] = *(float*)&cmd[1];
+      BinaryFloat bf;
+      bf.data
+      targetYPR[cmd[0]-0x22] = *(float*)(&cmd+1);
       break;
   }
 }
@@ -127,6 +220,8 @@ void handleInput() {
 void loop() {
   handleIMU();
   handleInput();
-  ledState = !ledState;
-  digitalWrite(LED, ledState);
+  if (tick++ == 0) {
+    ledState = !ledState;
+    digitalWrite(LED, ledState);
+  }
 }
