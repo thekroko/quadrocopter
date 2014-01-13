@@ -16,10 +16,10 @@ sleep 0.3s
 sleep 0.3s
 ./msp mode= 0 # OFF!
 ./msp typr= 0.0 0.0 0.0 0.0
-./msp mode= 1
 #./msp typr= 0.0 0.0 0.0 18.0
 #./msp pidmask= 10010001 # only disable yaw, and the TL/BR motors
-#./msp pidmask= 10010111 # only allow speed control
+./msp pidmask= 10010111 # only allow speed control
 #./msp pid= 0 0.20 0.0 0.0 0 0 -7 7 # yaw
 #./msp pid= 1 0.20 0.0 0.0 0 0 -7 7 # pitch
 #./msp pid= 2 0.20 0.0 0.0 0 0 -7 7 # roll
+./msp mode= 1
