@@ -22,6 +22,9 @@ function msp() {
   echo $@
   echo "0xFF $@" | xxd -r > /dev/ttyAMA0
 }
+function deg2rad() {
+  echo "$@ * 3.14159265358979323846 / 180.0" | bc -l
+}
 function ihex() {
   echo -en '0x'
   printf "%02X" $@ | tail -c 2
@@ -46,10 +49,10 @@ case "$CMD" in
   "mode=")     msp "0x20 0x0$1 0x00 0x00 0x00";;
   "yprerr")    msp "0x20 0x00 0x20 0x00 0x00";;
   "typr")      msp "0x21 0x00 0x00 0x00 0x00";;
-  "typr=")     msp "0x22 $(./utils/fl2b $1)"
-               msp "0x23 $(./utils/fl2b $2)"
-               msp "0x24 $(./utils/fl2b $3)"
-               msp "0x25 $(./utils/fl2b $4)"
+  "typr=")     msp "0x22 $(./utils/fl2b $(deg2rad $1))"
+               msp "0x23 $(./utils/fl2b $(deg2rad $2))"
+               msp "0x24 $(./utils/fl2b $(deg2rad $3))"
+               msp "0x25 $(./utils/fl2b $(deg2rad $4))"
                msp "0x21 0x00 0x00 0x00 0x00";;
   "pid")       msp "0x0B 0x${1}0 0x00 0x00 0x00"
                msp "0x0D 0x00 0x00 0x00 0x00";;
