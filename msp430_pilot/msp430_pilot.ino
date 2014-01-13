@@ -11,12 +11,13 @@
 
 //   [0x10] tl     tr     bl     br      Set Motor Speed directly
 
-//   [0x20] mode   ..................    Set Mode
+//   [0x20] mode  addFlags ..........    Set Mode
 //   [0x21] .........................    Print target Y/P/R rates
 //   [0x22] .........4-float.........    Set Rate control Yaw 
 //   [0x23] .........4-float.........    Set Rate control Pitch
 //   [0x24] .........4-float.........    Set Rate control Roll
 //   [0x25] .........4-float.........    Set Rate control Motor %
+//   [0x26] bitmask                      Disable PID
 
 // Pinout
 #define LED RED_LED
@@ -36,6 +37,7 @@ uint8_t mode; // statis in here @ high
 #define MODE_STABLE  2
 #define BIT_DMP (1 << 7)
 #define BIT_LED (1 << 6)
+#define BIT_PRINT_PID (1 << 5)
 #define BITS_MODE (0b111)
 
 // Components
@@ -80,6 +82,7 @@ float targetYPRS[4];
 PIDConfig pidC[PIDS]; // TODO
 PIDData pidD[PIDS];
 uint8_t selectedPID;
+uint8_t pidDisabled;
 
 // ------------------ Motor helpers
 void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values in 0-255*3L
@@ -165,24 +168,38 @@ bool handleIMU() {
      // clear the remaining packet
      for (int i = DMP_BUFF_SIZE; i < DMP_PACKET_SIZE; i += DMP_BUFF_SIZE)
        mpu.getFIFOBytes(fifoBuffer, min(DMP_BUFF_SIZE, DMP_PACKET_SIZE - i));
+     return true;
   }
 }
 
 void handlePIDs() {
   // Rate control
-  float yawCmd =   updatePID(pidC[R_YAW],   pidD[R_YAW],   ypr[0], targetYPRS[0]);
+  float yawCmd =   updatePID(pidC[R_YAW],   pidD[R_YAW],   ypr[0], targetYPRS[0]); // TL rotates right
   float pitchCmd = updatePID(pidC[R_PITCH], pidD[R_PITCH], ypr[1], targetYPRS[1]);
   float rollCmd =  updatePID(pidC[R_ROLL],  pidD[R_ROLL],  ypr[2], targetYPRS[2]);
   float motorSpeed = targetYPRS[3];
+  
+  if (pidDisabled & 0b0001) yawCmd = 0;
+  if (pidDisabled & 0b0010) pitchCmd = 0;
+  if (pidDisabled & 0b0100) rollCmd = 0;
+  if (pidDisabled & 0b1000) motorSpeed = 0;
+  
+  if ((mode & BIT_PRINT_PID)) {
+    mode &= ~BIT_PRINT_PID;
+    Serial.print("YPR_ERR ");
+    Serial.print(yawCmd); Serial.print(' ');
+    Serial.print(pitchCmd); Serial.print(' ');
+    Serial.println(rollCmd);    
+  }
   
   // We do the calculation either way so that we have a constant timing
   if ((mode & BITS_MODE) <= MODE_RAW) return;
   
   // Set motor speeds
   setMotors(
-   /* TL */ makeSpeed(motorSpeed + yawCmd - rollCmd - pitchCmd),
-   /* TR */ makeSpeed(motorSpeed - yawCmd + rollCmd - pitchCmd),
-   /* BL */ makeSpeed(motorSpeed + yawCmd - rollCmd + pitchCmd),
+   /* TL */ makeSpeed(motorSpeed - yawCmd - rollCmd - pitchCmd),
+   /* TR */ makeSpeed(motorSpeed + yawCmd - rollCmd + pitchCmd),
+   /* BL */ makeSpeed(motorSpeed + yawCmd + rollCmd - pitchCmd),
    /* BR */ makeSpeed(motorSpeed - yawCmd + rollCmd + pitchCmd)
   );
 }
@@ -288,9 +305,12 @@ void handleInput() {
       
     //   [0x20] mode   0xXX   0xXX   0xXX   0xFF    Set Mode (fixed/rate/..)
     case 0x20: {
-      mode &= ~BITS_MODE;
-      mode |= cmd[1];
-      goto printMode;
+      if (cmd[2] > 0) mode ^= cmd[2];
+      else {
+        mode |= cmd[1];
+        mode &= ~BITS_MODE;
+        goto printMode;
+      }
       break;
     }
     
@@ -310,6 +330,13 @@ void handleInput() {
     case 0x22: case 0x23: case 0x24: case 0x25: {
       int destIndex = cmd[0] - 0x22;
       memcpy(&targetYPRS[destIndex], &cmd[1], sizeof(float));
+      break;
+    }
+    
+    //   [0x26] bitmask                      Disable PID
+    case 0x26: {
+      pidDisabled = cmd[1];
+      Serial.println("PIDMASK");
       break;
     }
     
