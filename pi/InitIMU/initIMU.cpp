@@ -24,14 +24,14 @@ uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 // ===                      INITIAL SETUP                       ===
 // ================================================================
 
-void setup() {
+int setup() {
     // initialize device
     printf("Initializing MPU ...\n");
     mpu.initialize();
 
     // verify connection
     printf("Testing connection ...\n");
-    if (!mpu.testConnection()) printf("MPU6050 connection failed\n");
+    if (!mpu.testConnection()) { printf("MPU6050 connection failed\n"); return 1; }
 
     // load and configure the DMP
     printf("Flashing DMP ...\n");
@@ -53,18 +53,19 @@ void setup() {
         // get expected DMP packet size for later comparison
         packetSize = mpu.dmpGetFIFOPacketSize();
         printf("DMP ready\n");
+        printf("MPU6050 initialized!\n");
+        return 0;
     } else {
         // ERROR!
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
         printf("DMP Initialization failed (code %d)\n", devStatus);
+        return 1;
     }
 }
 
 int main() {
-    setup();
-    printf("MPU6050 initialized!\n");
-    return 0;
+    return setup();
 }
 

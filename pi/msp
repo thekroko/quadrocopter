@@ -52,7 +52,7 @@ case "$CMD" in
   "typr=")     msp "0x22 $(./utils/fl2b $(deg2rad $1))"
                msp "0x23 $(./utils/fl2b $(deg2rad $2))"
                msp "0x24 $(./utils/fl2b $(deg2rad $3))"
-               msp "0x25 $(./utils/fl2b $(deg2rad $4))"
+               msp "0x25 $(./utils/fl2b $4)"
                msp "0x21 0x00 0x00 0x00 0x00";;
   "pid")       msp "0x0B 0x${1}0 0x00 0x00 0x00"
                msp "0x0D 0x00 0x00 0x00 0x00";;
