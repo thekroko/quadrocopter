@@ -82,19 +82,24 @@ float targetYPRS[4];
 PIDConfig pidC[PIDS]; // TODO
 PIDData pidD[PIDS];
 uint8_t selectedPID;
-uint8_t pidDisabled;
+uint8_t pidDisabled; // low: disable pids; high: disable motors
 
 // ------------------ Motor helpers
 void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values in 0-255*3L
-  motorTL.writeMicroseconds((uint16_t)tl*3L + 1235L);
-  motorTR.writeMicroseconds((uint16_t)tr*3L + 1235L);
-  motorBL.writeMicroseconds((uint16_t)bl*3L + 1235L);
-  motorBR.writeMicroseconds((uint16_t)br*3L + 1235L);
+  if (pidDisabled & (1 << 7)) tl = 0;
+  if (pidDisabled & (1 << 6)) tr = 0;
+  if (pidDisabled & (1 << 5)) bl = 0;
+  if (pidDisabled & (1 << 4)) br = 0;
+
+  motorTL.writeMicroseconds((uint16_t)tl + 1235L);
+  motorTR.writeMicroseconds((uint16_t)tr + 1235L);
+  motorBL.writeMicroseconds((uint16_t)bl + 1235L);
+  motorBR.writeMicroseconds((uint16_t)br + 1235L);
 }
 
 uint16_t makeSpeed(float speed) {
-  if (speed >= 100.0) return 254*3L;
-  if (speed <= 0.0) return 0;
+  if (speed >= 100.0) return 254L*3L;
+  if (speed <= 0.0) return 0L;
   speed = speed * 254.0 * 3.0 / 100.0;
   return (uint16_t)speed;
 }
@@ -128,7 +133,7 @@ void setup() {
     // Calibrate? (TODO: Reenable)
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
-      setMotors(254*3L, 254*3L, 254*3L, 254*3L);
+      setMotors(254L*3L, 254L*3L, 254L*3L, 254L*3L);
       delay(5000);
     } else Serial.println("INIT Restart after reset");
     
@@ -262,6 +267,7 @@ void handleInput() {
     case 0x0C: {
       float* p = (float*)(&pidC[selectedPID >> 4]);
       memcpy(&p[selectedPID & 0b1111], &cmd[1], sizeof(float));
+      Serial.println("PIDSET ");
       break;
     }
       
