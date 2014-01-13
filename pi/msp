@@ -4,6 +4,7 @@ if [ -z "$1" ]; then
   echo "$0 write 0x00 [...] " >&2; 
   echo "$0 reset" >&2; 
   echo "$0 test" >&2; 
+  echo "$0 cut" >&2; 
   echo "$0 initdmp" >&2; 
   echo "$0 motors= TL TR BL BR" >&2; 
   echo "$0 mode/mode= id" >&2; 
@@ -35,6 +36,7 @@ case "$CMD" in
   "ypr")       msp "0x01 0x00 0x00 0x00 0x00";;
   "yprl")      while [ 1 ]; do sleep 0.2; msp "0x01 0x00 0x00 0x00 0x00"; done ;;
   "mode")      msp "0x02 0x00 0x00 0x00 0x00";;
+  "cut")       $0 motors= 0 0 0 0;;
   "initdmp")   msp "0x0A 0x00 0x00 0x00 0x00";;
   "reset")     msp "0x0F 0xB5 0x3A 0x79 0x00";;
   "motors=")   msp "0x10 $(ihex $1) $(ihex $2) $(ihex $3) $(ihex $4)";;
