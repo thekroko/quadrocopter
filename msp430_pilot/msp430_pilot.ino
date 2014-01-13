@@ -133,7 +133,7 @@ void setup() {
     } else Serial.println("INIT Restart after reset");
     
     setMotors(0, 0, 0, 0);
-    delay(2000);
+    delay(10);
     
     // All done
     Serial.println("RDY All ready!");
@@ -307,8 +307,8 @@ void handleInput() {
     case 0x20: {
       if (cmd[2] > 0) mode ^= cmd[2];
       else {
-        mode |= cmd[1];
         mode &= ~BITS_MODE;
+        mode |= cmd[1];
         goto printMode;
       }
       break;
