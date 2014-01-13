@@ -12,7 +12,7 @@ uint8_t toExpire;
 #define P_BL P2_0
 #define P_BR P2_1
 
-#define HZ 490 // must be less than 500
+#define HZ 490 // must be <= 490
 #define PERIOD (1000000L / HZ * TICKS_PER_US)
 #define TICKS_PER_US 2
 #define TRIM_US 0

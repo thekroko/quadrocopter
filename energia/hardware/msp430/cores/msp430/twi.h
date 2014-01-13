@@ -45,7 +45,7 @@
 #include <inttypes.h>
 
 #ifndef TWI_FREQ
-#define TWI_FREQ 235000L
+#define TWI_FREQ 230000L
 #endif
 
 #ifndef TWI_BUFFER_LENGTH

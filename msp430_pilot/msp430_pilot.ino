@@ -23,10 +23,6 @@
 
 // Pinout
 #define LED RED_LED
-#define MOTOR_TL P1_5
-#define MOTOR_TR P1_4
-#define MOTOR_BL P2_0
-#define MOTOR_BR P2_1
 #define I2CDEV_IMPLEMENTATION I2CDEV_ARDUINO_WIRE
 
 #define CMD_SIZE 5
@@ -50,8 +46,8 @@ uint8_t mode; // statis in here @ high
 #include "I2Cdev.h"
 #include "Wire.h"
 #include "MPU6050_6Axis_MotionApps20.h"
-#include "Servo.h"
 #include "pid.h"
+#include "esc.h"
 
 #ifndef RELEASE
 #define STACK_MAGIC 0x3F
@@ -70,7 +66,6 @@ inline void checkStack(char c) {
 #endif
 
 MPU6050 mpu;
-Servo motorTL, motorTR, motorBL, motorBR; 
 
 // Global State
 #define __no_init    __attribute__ ((section (".noinit"))) 
@@ -116,16 +111,12 @@ void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values i
   if (pidDisabled & (1 << 5)) bl = 0;
   if (pidDisabled & (1 << 4)) br = 0;
 
-  motorTL.writeMicroseconds((uint16_t)tl + 1235L);
-  motorTR.writeMicroseconds((uint16_t)tr + 1235L);
-  motorBL.writeMicroseconds((uint16_t)bl + 1235L);
-  motorBR.writeMicroseconds((uint16_t)br + 1235L);
+  setESCs(tl, tr, bl, br);
 }
 
 uint16_t makeSpeed(float speed) {
-  if (speed >= 100.0) return 254L*3L;
-  if (speed <= 0.0) return 0L;
-  speed = speed * 254.0 * 3.0 / 100.0;
+  if (speed >= 1000.0) return 1000;
+  if (speed <= 0.0) return 0;
   return (uint16_t)speed;
 }
 
@@ -155,12 +146,12 @@ void setup() {
     digitalWrite(LED, LOW);
     
     // Initialize Servos
-    motorTL.attach(MOTOR_TL); motorTR.attach(MOTOR_TR); motorBL.attach(MOTOR_BL); motorBR.attach(MOTOR_BR);
+    initESCs();
 
     // Calibrate?
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
-      setMotors(254L*3L, 254L*3L, 254L*3L, 254L*3L);
+      setESCs(1000, 1000, 1000, 1000);
       delay(5000);
     } else Serial.println("INIT Restart after reset");
     
@@ -185,7 +176,7 @@ bool handleIMU() {
   
   // Check for overflows
   uint8_t mpuIntStatus = mpu.getIntStatus();
-  if ((mpuIntStatus & 0x10) || fifoCount >= 42*3) {
+  if ((mpuIntStatus & 0x10) || fifoCount >= 42*3 /* too many old frames... */) {
     // reset so we can continue cleanly3
     mpu.resetFIFO();
     Serial.println(F("FIFO!"));
@@ -270,7 +261,8 @@ void handleInput() {
     // Read Mode
     case 0x02: {
       printMode:
-      Serial.print("MODE "); Serial.println(mode & BITS_MODE);
+      Serial.print("MODE "); Serial.print(mode & BITS_MODE);
+      Serial.print(' '); Serial.println(mode >> 3);
       break;
     }
 
@@ -356,7 +348,7 @@ void handleInput() {
     case 0x21: {
       Serial.print("RATE_YPRS ");
       for (int i = 0; i < 4; i++) {
-        Serial.print(targetYPRS[i] * (i == 3 ? 1 : RAD2DEG)); Serial.print(i == 3 ? '\n' : ' '); 
+        Serial.print(targetYPRS[i] * (i == 3 ? 1 : RAD2DEG)); Serial.print(i == 3 ? "\r\n" : " "); 
       }
       break;
     }
