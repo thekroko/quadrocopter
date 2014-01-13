@@ -1,0 +1,52 @@
+target                                  14.92ms
+
+no data available:                      0.65ms
+
+Input: us=657
+
+standard loop, twi=160 KHz:             20.62ms
+
+IMU-getBytes: us=2769
+IMU-getQuaternion: us=1619
+IMU-getGravity: us=1943
+IMU-getYPR: us=8482
+IMU-getYPR2: us=833
+IMU-flush: us=2951
+PID: us=1795
+Input: us=234
+
+standard loop, twi=200 KHz:             19.77ms
+
+IMU-getBytes: us=2417, buf=8
+IMU-getQuaternion: us=1644
+IMU-getGravity: us=1927
+IMU-getYPR: us=8399
+IMU-getYPR2: us=824
+IMU-flush: us=2546
+PID: us=1787
+Input: us=233
+
+standard loop, twi=200 KHz, buf=12:    flush 0.2ms faster
+
+parallel flush, twi=200 KHz             18.63ms
+
+IMU-getBytes: us=2433
+IMU-getQuaternion: us=2289
+IMU-getGravity: us=2565
+IMU-getYPR: us=9255
+PID: us=1855
+Input: us=233
+
+parallel flush, twi=220 KHz             18.28ms3/
+
+IMU-getBytes: us=2307
+IMU-getQuaternion: us=2208
+IMU-getGravity: us=2522
+IMU-getYPR: us=9181
+PID: us=1831
+Input: us=238
+
+~                                                                                                                         
+~                                                                                                                         
+~                                                                                                                         
+~                  

@@ -19,6 +19,8 @@
 //   [0x25] .........4-float.........    Set Rate control Motor %
 //   [0x26] bitmask                      Disable PID
 
+#define RELEASE
+
 // Pinout
 #define LED RED_LED
 #define MOTOR_TL P1_5
@@ -30,6 +32,10 @@
 #define CMD_SIZE 5
 #define DMP_PACKET_SIZE 42
 #define DMP_BUFF_SIZE 16 // only the quaternion
+
+#if F_CPU != 16000000L
+#error "WRONG F_CPU"
+#endif
 
 uint8_t mode; // statis in here @ high
 #define MODE_RAW     0
@@ -47,6 +53,7 @@ uint8_t mode; // statis in here @ high
 #include "Servo.h"
 #include "pid.h"
 
+#ifndef RELEASE
 #define STACK_MAGIC 0x3F
 uint8_t* ramEnd; // this ends up in the far end of the ram, next to the stack. (but before our includes)
 
@@ -58,6 +65,9 @@ inline void checkStack(char c) {
     while (1) ; // halt
   }
 }
+#else
+#define checkStack(x) ;
+#endif
 
 MPU6050 mpu;
 Servo motorTL, motorTR, motorBL, motorBR; 
@@ -67,6 +77,19 @@ Servo motorTL, motorTR, motorBL, motorBR;
 #define RESET_MAGIC 0xAC19
 __no_init uint16_t reset;
 uint8_t tick;
+
+#ifndef RELEASE
+#define RESET_MEASURE { TA1R = 0; }
+void MEASURE(char* x) { 
+  if (tick == 0) { 
+    Serial.print(x); Serial.print(": us="); Serial.println((uint32_t)TA1R * 8L / clockCyclesPerMicrosecond()); 
+    Serial.flush(); TA1R = 0;
+  } 
+}
+#else
+#define RESET_MEASURE ;
+#define MEASURE(x) ;
+#endif
 
 uint8_t fifoBuffer[DMP_BUFF_SIZE];  // FIFO storage buffer
 
@@ -78,8 +101,10 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 #define R_PITCH  1
 #define R_ROLL   2
 #define PIDS 3
+#define RAD2DEG (180.0 / M_PI)
+
 float targetYPRS[4];
-PIDConfig pidC[PIDS]; // TODO
+PIDConfig pidC[PIDS];
 PIDData pidD[PIDS];
 uint8_t selectedPID;
 uint8_t pidDisabled; // low: disable pids; high: disable motors
@@ -110,13 +135,15 @@ void setup() {
     reset = 0;
     
     // Initialize all floats (printing crashes device otherwise)
+#ifndef RELEASE
     ramEnd = (uint8_t*)malloc(1);
     *ramEnd = STACK_MAGIC;
+#endif
     for (int i = 0; i < 3; i++) ypr[i] = i+1;
     for (int i = 0; i < 4; i++) targetYPRS[i] = i+1;
     memset(&pidC, 0, sizeof(PIDConfig) * PIDS);
     memset(&pidD, 0, sizeof(PIDData) * PIDS);
-    
+
     // Make sure RX has a pullup (we get random interference otherwise)
     pinMode(P1_1, INPUT_PULLUP);
     Serial.begin(115200);
@@ -130,7 +157,7 @@ void setup() {
     // Initialize Servos
     motorTL.attach(MOTOR_TL); motorTR.attach(MOTOR_TR); motorBL.attach(MOTOR_BL); motorBR.attach(MOTOR_BR);
 
-    // Calibrate? (TODO: Reenable)
+    // Calibrate?
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
       setMotors(254L*3L, 254L*3L, 254L*3L, 254L*3L);
@@ -142,6 +169,10 @@ void setup() {
     
     // All done
     Serial.println("RDY All ready!");
+    
+    // Setup a cycle timer to measure performance
+    TA1CTL = TASSEL_2 + MC_2 + ID_3; // SMCLK/8, count to 
+    TA1CCTL0 = 0;
 }
 
 bool handleIMU() {
@@ -150,29 +181,30 @@ bool handleIMU() {
   
   // Check if we have a new packet
   uint16_t fifoCount = mpu.getFIFOCount();
-  if (fifoCount < 2*DMP_PACKET_SIZE) return false; // not yet ready
+  if (fifoCount < DMP_PACKET_SIZE) return false; // not yet ready
   
   // Check for overflows
   uint8_t mpuIntStatus = mpu.getIntStatus();
-  if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-    // reset so we can continue cleanly
+  if ((mpuIntStatus & 0x10) || fifoCount >= 42*3) {
+    // reset so we can continue cleanly3
     mpu.resetFIFO();
-    Serial.println(F("ERR FIFO overflow!"));
+    Serial.println(F("FIFO!"));
   } else if (mpuIntStatus & 0x02) { // data ready
-     mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE);
+     // WARNING: this assumes a fixed size of 42 bytes @ pak!
+     // We do this so that we can efficiently flush our TWI buffer as things are happening
+     mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */);
+     //MEASURE("IMU-getBytes");
      Quaternion q;           // [w, x, y, z]         quaternion container
      VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
+     mpu.getFIFOBytes(fifoBuffer, 9); // discard
+     //MEASURE("IMU-getQuaternion");
      mpu.dmpGetGravity(&gravity, &q);
+     mpu.getFIFOBytes(fifoBuffer, 8); // discard
+     //MEASURE("IMU-getGravity");
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); // /!\ Deepest point in the stack
-     
-     ypr[0] *= 180.0/M_PI;
-     ypr[1] *= 180.0/M_PI;
-     ypr[2] *= 180.0/M_PI;
-     
-     // clear the remaining packet
-     for (int i = DMP_BUFF_SIZE; i < DMP_PACKET_SIZE; i += DMP_BUFF_SIZE)
-       mpu.getFIFOBytes(fifoBuffer, min(DMP_BUFF_SIZE, DMP_PACKET_SIZE - i));
+     mpu.getFIFOBytes(fifoBuffer, 9); // discard
+     //MEASURE("IMU-getYPR");
      return true;
   }
 }
@@ -230,7 +262,7 @@ void handleInput() {
     case 0x01: {
       Serial.print("YPR ");
       for (int i = 0; i < 3; i++) {
-        Serial.print(ypr[i]); Serial.print(i == 2 ? '\n' : ' ');      
+        Serial.print(ypr[i] * RAD2DEG); Serial.print(i == 2 ? '\n' : ' ');      
       }
       break;
     }
@@ -324,7 +356,7 @@ void handleInput() {
     case 0x21: {
       Serial.print("RATE_YPRS ");
       for (int i = 0; i < 4; i++) {
-        Serial.print(targetYPRS[i]); Serial.print(i == 3 ? '\n' : ' '); 
+        Serial.print(targetYPRS[i] * (i == 3 ? 1 : RAD2DEG)); Serial.print(i == 3 ? '\n' : ' '); 
       }
       break;
     }
@@ -348,17 +380,21 @@ void handleInput() {
     
     default: {
       Serial.println("?");
+      break;
     }
   }
 }
 
+
 void loop() {
   checkStack('M');
+  RESET_MEASURE // reset timer
   
   if (handleIMU()) {
     handlePIDs();
-  }
+  } 
   handleInput();
+  MEASURE("Loop");
   
   // Give some status & frequency indicator
   if (tick++ == 0) {

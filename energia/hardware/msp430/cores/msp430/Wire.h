@@ -34,7 +34,7 @@
 #include "Stream.h"
 #include <msp430.h>
 
-#define BUFFER_LENGTH 8
+#define BUFFER_LENGTH 9
 
 class TwoWire : public Stream
 {
