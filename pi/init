@@ -2,13 +2,18 @@
 # Initializes the RaspiCopter completely
 
 # Prepare our UART
-stty -F /dev/ttyAMA0 115200 raw
+stty -F /dev/ttyAMA0 cs8 115200 ignbrk -brkint -icrnl -imaxbel -opost -onlcr -isig -icanon -iexten -echo -echoe -echok -echoctl -echoke noflsh -ixon -crtscts
 
 # Init our low-level control
 modprobe i2c-dev
 ./msp reset
-sleep 0.5s
+sleep 0.3s
 ./initIMU # this will put the MPU6050 into 6-DOF DMP mode
+sleep 0.3s
 ./msp initdmp # this initializes the MPU
 
-
+# Init PID controllers
+sleep 0.3s
+./msp typr= 0 0 0 0
+./msp pidmask= 7 # disable everything except motor
+./msp mode= 1 # rate
