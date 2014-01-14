@@ -37,9 +37,7 @@ THE SOFTWARE.
 #ifndef _MPU6050_H_
 #define _MPU6050_H_
 
-#include "I2Cdev.h"
-//#include <avr/pgmspace.h>
-
+#include <inttypes.h>
 
 
 #define MPU6050_ADDRESS_AD0_LOW     0x68 // address pin low (GND), default for InvenSense evaluation board
@@ -863,7 +861,7 @@ class MPU6050 {
             uint8_t dmpGetQuaternionFloat(float *data, const uint8_t* packet=0);
 
             uint8_t dmpProcessFIFOPacket(const unsigned char *dmpData);
-            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed=NULL);
+            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed);
 
             uint8_t dmpSetFIFOProcessedCallback(void (*func) (void));
 
@@ -965,7 +963,7 @@ class MPU6050 {
             uint8_t dmpGetQuaternionFloat(float *data, const uint8_t* packet=0);
 
             uint8_t dmpProcessFIFOPacket(const unsigned char *dmpData);
-            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed=NULL);
+            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed);
 
             uint8_t dmpSetFIFOProcessedCallback(void (*func) (void));
 
@@ -981,7 +979,7 @@ class MPU6050 {
 
     private:
         uint8_t devAddr;
-        uint8_t buffer[2 /* this is terrible ... 14*/];
+        uint8_t buffer[2];
 };
 
 #endif /* _MPU6050_H_ */

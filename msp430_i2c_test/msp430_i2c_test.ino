@@ -1,35 +1,10 @@
-// UART Commands:
-//   [0x00] .........................    Who am I? Returns "MSP430"
-//   [0x01] .........................    Read Yaw/Pitch/Roll
-//   [0x02] .........................    Read Mode
-
-//   [0x0A] .........................    Init DMP and I2C (Required for most other commands)
-//   [0x0B] pid    val#  ............    Change PID register
-//   [0x0C] .........4-float.........    Change PID value
-//   [0x0D] .........................    Print PID values
-//   [0x0F] 0xB5   0x3A   0x79   0x00    Reset controller
-
-//   [0x10] tl     tr     bl     br      Set Motor Speed directly
-
-//   [0x20] mode  addFlags ..........    Set Mode
-//   [0x21] .........................    Print target Y/P/R rates
-//   [0x22] .........4-float.........    Set Rate control Yaw 
-//   [0x23] .........4-float.........    Set Rate control Pitch
-//   [0x24] .........4-float.........    Set Rate control Roll
-//   [0x25] .........4-float.........    Set Rate control Motor %
-//   [0x26] bitmask                      Disable PID
-
-// Pinout
 #define LED RED_LED
-#define I2CDEV_IMPLEMENTATION I2CDEV_ARDUINO_WIRE
-
 #define DMP_PACKET_SIZE 42
 #define DMP_BUFF_SIZE 16 // only the quaternion
 #define RAD2DEG (180.0/M_PI)
 
 // Components
-#include "I2Cdev.h"
-#include "Wire.h"
+#include "TI_USCI_I2C_master.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 
 #define STACK_MAGIC 0x3F
@@ -84,13 +59,45 @@ void setup() {
     checkStack('S');
     
     // Wait for mpu init
+    
+  BCSCTL1 = CALBC1_8MHZ; 
+  DCOCTL = CALDCO_8MHZ;
+
+  _EINT();
     bool init;
     do {
+      // Release I2C
+      TI_USCI_I2C_off();
+      pinMode(P1_6, INPUT_PULLUP);
+      pinMode(P1_7, INPUT_PULLUP);
+      
       while (!Serial.available()) ;
       while (Serial.available()) Serial.read();
-      Wire.begin();
+      Serial.println("MPU INIT");
+      
+      mpu.initialize();
+      Serial.print("DEV ID: "); Serial.flush(); 
+     
+      uint8_t buffer[2];
+      buffer[0] = MPU6050_RA_WHO_AM_I;
+      while (TI_USCI_I2C_notready()) ;
+      Serial.print('x'); Serial.flush();
+      TI_USCI_I2C_restart();
+      TI_USCI_I2C_transmit(1, buffer);
+      Serial.print('x'); Serial.flush();
+      while (TI_USCI_I2C_notready()) ;
+      Serial.print('x'); Serial.flush();
+      buffer[0] = 0xFF;
+      TI_USCI_I2C_receive(1, buffer);
+      delay(5);
+      Serial.print('x'); Serial.flush();
+      while (TI_USCI_I2C_notready()) ;
+      Serial.print(buffer[0]);
+
+      Serial.println("TEST CONNECTION"); Serial.flush();
       init = mpu.testConnection();
       if (init) {
+        Serial.println("CONNECTION OK");
         mpu.resetFIFO();
         mpu.getIntStatus();
         Serial.println("DMP ready");
