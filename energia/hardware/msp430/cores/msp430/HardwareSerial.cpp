@@ -61,7 +61,7 @@
 #define UCAxIFG       UCA0IFG
 #define UCAxIV        UCA0IV
 
-#define SERIAL_BUFFER_SIZE 12
+#define SERIAL_BUFFER_SIZE 8
 
 struct ring_buffer
 {

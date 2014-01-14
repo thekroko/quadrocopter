@@ -4,7 +4,8 @@ export PATH=$PATH:/opt/mspgcc/bin
 APPDIR="$(dirname -- $(readlink -f -- "${0}") )"
 
 cd $APPDIR
- 
+echo $APPDIR
+
 for LIB in \
     java/lib/rt.jar \
     java/lib/tools.jar \

@@ -49,7 +49,6 @@ uint8_t mode; // statis in here @ high
 #include "pid.h"
 #include "esc.h"
 
-#ifndef RELEASE
 #define STACK_MAGIC 0x3F
 uint8_t* ramEnd; // this ends up in the far end of the ram, next to the stack. (but before our includes)
 
@@ -61,9 +60,6 @@ inline void checkStack(char c) {
     while (1) ; // halt
   }
 }
-#else
-#define checkStack(x) ;
-#endif
 
 MPU6050 mpu;
 
@@ -126,10 +122,8 @@ void setup() {
     reset = 0;
     
     // Initialize all floats (printing crashes device otherwise)
-#ifndef RELEASE
     ramEnd = (uint8_t*)malloc(1);
     *ramEnd = STACK_MAGIC;
-#endif
     for (int i = 0; i < 3; i++) ypr[i] = i+1;
     for (int i = 0; i < 4; i++) targetYPRS[i] = i+1;
     memset(&pidC, 0, sizeof(PIDConfig) * PIDS);
@@ -146,9 +140,11 @@ void setup() {
     digitalWrite(LED, LOW);
     
     // Initialize Servos
+    checkStack('I');
     initESCs();
 
     // Calibrate?
+    
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
       setESCs(1000, 1000, 1000, 1000);
@@ -164,6 +160,7 @@ void setup() {
     // Setup a cycle timer to measure performance
     TA1CTL = TASSEL_2 + MC_2 + ID_3; // SMCLK/8, count to 
     TA1CCTL0 = 0;
+    checkStack('S');
 }
 
 bool handleIMU() {
@@ -188,13 +185,15 @@ bool handleIMU() {
      Quaternion q;           // [w, x, y, z]         quaternion container
      VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
-     mpu.getFIFOBytes(fifoBuffer, 9); // discard
+     mpu.getFIFOBytes(fifoBuffer, 7); // discard
      //MEASURE("IMU-getQuaternion");
      mpu.dmpGetGravity(&gravity, &q);
-     mpu.getFIFOBytes(fifoBuffer, 8); // discard
+     mpu.getFIFOBytes(fifoBuffer, 7); // discard
      //MEASURE("IMU-getGravity");
+     checkStack('X');
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); // /!\ Deepest point in the stack
-     mpu.getFIFOBytes(fifoBuffer, 9); // discard
+     checkStack('D');
+     mpu.getFIFOBytes(fifoBuffer, 12); // discard
      //MEASURE("IMU-getYPR");
      return true;
   }
@@ -383,7 +382,9 @@ void loop() {
   RESET_MEASURE // reset timer
   
   if (handleIMU()) {
+    checkStack('I');
     handlePIDs();
+    checkStack('P');
   } 
   handleInput();
   MEASURE("Loop");
