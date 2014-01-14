@@ -84,8 +84,8 @@ bool MPU6050::testConnection() {
  */
 uint8_t MPU6050::getIntStatus() {
     buffer[0] = MPU6050_RA_INT_STATUS;
-    if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
-    if (twi_readFrom(devAddr, buffer, 1, true) != 1) return 0xFF;
+    if (twi_writeTo(devAddr, buffer, 1, true)) return 0xFF;
+    if (twi_readFrom(devAddr, buffer, 1) != 1) return 0xFF;
     return buffer[0];
 }
 
@@ -97,10 +97,10 @@ uint8_t MPU6050::getIntStatus() {
  */
 uint8_t MPU6050::resetFIFO() {
   buffer[0] = MPU6050_RA_USER_CTRL;
-  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
-  if (twi_readFrom(devAddr, buffer+1, 1, false) != 1) return 0xFF;
+  if (twi_writeTo(devAddr, buffer, 1, true)) return 0xFF;
+  if (twi_readFrom(devAddr, buffer+1, 1) != 1) return 0xFF;
   buffer[1] |= (1 << MPU6050_USERCTRL_FIFO_RESET_BIT);
-  if (twi_writeTo(devAddr, buffer, 2, true, true)) return 0xFF;
+  if (twi_writeTo(devAddr, buffer, 2, true)) return 0xFF;
   return 0;
 }
 
@@ -115,8 +115,8 @@ uint8_t MPU6050::resetFIFO() {
  */
 uint16_t MPU6050::getFIFOCount() {
   buffer[0] = MPU6050_RA_FIFO_COUNTH;
-  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFFFF;
-  if (twi_readFrom(devAddr, buffer, 2, true) != 2) return 0xFFFF;
+  if (twi_writeTo(devAddr, buffer, 1, true)) return 0xFFFF;
+  if (twi_readFrom(devAddr, buffer, 2) != 2) return 0xFFFF;
   return (((uint16_t)buffer[0]) << 8) | buffer[1];
 }
 
@@ -149,12 +149,8 @@ uint16_t MPU6050::getFIFOCount() {
  */
 uint8_t MPU6050::getFIFOBytes(uint8_t *data, uint8_t length) {
   buffer[0] = MPU6050_RA_FIFO_R_W;
-  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
-  while (length > 0) {
-    int read = twi_readFrom(devAddr, data, length, true);
-    data += read;
-    length -= read;
-  }
+  if (twi_writeTo(devAddr, buffer, 1, true)) return 0xFF;
+  if (twi_readFrom(devAddr, data, length) != length) return 0xFF;
   return 0;
 }
 
@@ -169,8 +165,8 @@ uint8_t MPU6050::getFIFOBytes(uint8_t *data, uint8_t length) {
  */
 uint8_t MPU6050::getDeviceID() {
   buffer[0] = MPU6050_RA_WHO_AM_I;
-  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
-  if (twi_readFrom(devAddr, buffer, 1, true) != 1) return 0xFE;
+  if (twi_writeTo(devAddr, buffer, 1, true)) return 0xFF;
+  if (twi_readFrom(devAddr, buffer, 1) != 1) return 0xFE;
   return (buffer[0] >> 1) & 0b111111;
 }
 

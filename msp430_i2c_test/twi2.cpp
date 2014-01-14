@@ -50,7 +50,7 @@
 #error Only B0 supported
 #endif
 
-#if TWI_FREQ != 400000L
+#if TWI_FREQ < 400000L
 #error "not 400 khz"
 #endif
 
@@ -58,19 +58,13 @@ static volatile uint8_t twi_state;
 static volatile uint8_t twi_sendStop;           // should the transaction end with a stop
 static volatile uint8_t twi_inRepStart;         // in the middle of a repeated start
 
-static void (*twi_onSlaveTransmit)(void);
-static void (*twi_onSlaveReceive)(uint8_t*, int);
-
 static uint8_t twi_masterBuffer[TWI_BUFFER_LENGTH];
 static volatile uint8_t twi_masterBufferIndex;
 static uint8_t twi_masterBufferLength;
-
-static uint8_t twi_txBuffer[TWI_BUFFER_LENGTH];
-static volatile uint8_t twi_txBufferIndex;
-static volatile uint8_t twi_txBufferLength;
-static uint8_t twi_rxBuffer[TWI_BUFFER_LENGTH];
-static volatile uint8_t twi_rxBufferIndex;
 static volatile uint8_t twi_error;
+
+static volatile uint8_t* twi_rxBuffer;
+static volatile uint8_t twi_rxLength;
 
 #define UCBxCTLW0     UCB1CTLW0
 #define UCBxCTL0      UCB1CTL0
@@ -150,7 +144,7 @@ void twi_init(void)
  *          length: number of bytes to read into array
  * Output   number of bytes read
  */
-uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sendStop)
+uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length)
 {
   bool sendStop = true;
   uint8_t i;
@@ -163,14 +157,9 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sen
   UCB0I2CIE |= (UCALIE|UCNACKIE|UCSTPIE);  // Enable I2C interrupts
   UC0IE |= (UCB0RXIE | UCB0TXIE);          // Enable I2C interrupts
 
-  // ensure data will fit into buffer
-  if(TWI_BUFFER_LENGTH < length){
-    return 0;
-  }
-
   // initialize buffer iteration vars
-  twi_masterBufferIndex = 0;
-  twi_masterBufferLength = length-1;  // This is not intuitive, read on...
+  twi_rxBuffer = data;
+  twi_rxLength = length;
   // On receive, the previously configured ACK/NACK setting is transmitted in
   // response to the received byte before the interrupt is signalled.
   // Therefor we must actually set NACK when the _next_ to last byte is
@@ -184,22 +173,22 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sen
     while(UCB0CTL1 & UCTXSTT);            // Wait for start bit to be sent
     UCB0CTL1 |= UCTXSTP;                  // Send I2C stop condition after recv
   }
+  
+  if (data == 0) return length; // no dest -> return immediately
 
   /* Wait in low power mode for read operation to complete */
   while(twi_state != TWI_IDLE){
     //__bis_SR_register(LPM0_bits);
   }
 
-  if (twi_masterBufferIndex < length)
-    length = twi_masterBufferIndex;
-
-  for(i = 0; i < length; ++i){
-    data[i] = twi_masterBuffer[i];
-  }
-
   /* Ensure stop condition got sent before we exit. */
   while (UCB0CTL1 & UCTXSTP);
-  return length;
+  return length - twi_rxLength;
+}
+
+void twi_flush(void) {
+  while( twi_state != TWI_IDLE) ;
+  while (UCB0CTL1 & UCTXSTP) ;
 }
 
 /*
@@ -265,35 +254,28 @@ uint8_t twi_writeTo(uint8_t address, uint8_t* data, uint8_t length, uint8_t wait
   return twi_error;
 }
 
-/*
- * Function twi_attachSlaveRxEvent
- * Desc     sets function called before a slave read operation
- * Input    function: callback function to use
- * Output   none
- */
-void twi_attachSlaveRxEvent( void (*function)(uint8_t*, int) )
-{
-  twi_onSlaveReceive = function;
-}
-
 void i2c_txrx_isr(void)  // RX/TX Service
 {
   /* USCI I2C mode. USCI_B0 receive interrupt flag.
    	 * UCB0RXIFG is set when UCB0RXBUF has received a complete character. */
-  if (UC0IFG & UCB0RXIFG) {
+  if ((UC0IFG & UCB0RXIFG) && twi_state ==  TWI_MRX) {
     /* Master receive mode. */
-    if (twi_state ==  TWI_MRX) {
-      twi_masterBuffer[twi_masterBufferIndex++] = UCB0RXBUF;
-      if (twi_masterBufferIndex == twi_masterBufferLength)
-        /* Only one byte left. Generate STOP condition.
-         	       * In master mode a STOP is preceded by a NACK */
-        UCB0CTL1 |= UCTXSTP;
-      if(twi_masterBufferIndex > twi_masterBufferLength ) {
-        /* All bytes received. We are idle*/
-        //__bic_SR_register(LPM0_bits);
-        twi_state = TWI_IDLE;
+    if (twi_rxLength > 0) {
+      uint8_t data = UCB0RXBUF;
+      if (twi_rxBuffer != 0) {
+        *twi_rxBuffer = data;
+        twi_rxBuffer++;
       }
-    } else {
+      twi_rxLength--;
+    }
+    if (twi_rxLength == 1)
+      /* Only one byte left. Generate STOP condition.
+       	       * In master mode a STOP is preceded by a NACK */
+      UCB0CTL1 |= UCTXSTP;
+    else if(twi_rxLength == 0) {
+      /* All bytes received. We are idle*/
+      //__bic_SR_register(LPM0_bits);
+      twi_state = TWI_IDLE;
     }
   } 
   /* USCI I2C mode. USCI_B0 transmit interrupt flag.
@@ -349,7 +331,7 @@ void i2c_state_isr(void)  // I2C Service
     /* TODO: This can just as well be an address NACK.
      		 * Figure out a way to distinguish between ANACK and DNACK */
     twi_error = TWI_ERROR_DATA_NACK;
-    __bic_SR_register(LPM0_bits);
+    //__bic_SR_register(LPM0_bits);
   }
   /* Start condition interrupt flag.
    	 * UCSTTIFG is automatically cleared if a STOP condition is received. */
@@ -361,37 +343,19 @@ void i2c_state_isr(void)  // I2C Service
     if (UCB0CTL1 &  UCTR) {
       /* Slave TX mode. */
       twi_state =  TWI_STX;
-      /* Ready the tx buffer index for iteration. */
-      twi_txBufferIndex = 0;
-      /* Set tx buffer length to be zero, to verify if user changes it. */
-      twi_txBufferLength = 0;
-      /* Request for txBuffer to be filled and length to be set. */
-      /* note: user must call twi_transmit(bytes, length) to do this */
-      twi_onSlaveTransmit();
-      /* If they didn't change buffer & length, initialize it 
-       			 * TODO: Is this right? Shouldn't we reply with a NACK if there is no data to send? */
-      if (0 == twi_txBufferLength) {
-        twi_txBufferLength = 1;
-        twi_txBuffer[0] = 0x00;
-      }
     } 
     else {
       /* Slave receive mode. */
       twi_state =  TWI_SRX;
-      /* Indicate that rx buffer can be overwritten and ACK */
-      twi_rxBufferIndex = 0;
     }
   }
   /* Stop condition interrupt flag.
-   	 * UCSTPIFG is automatically cleared when a START condition is received. */
+   * UCSTPIFG is automatically cleared when a START condition is received. */
 
   if (UCB0STAT & UCSTPIFG) {
     UCB0STAT &= ~UCSTPIFG;
-    if (twi_state ==  TWI_SRX) {
-      /* Callback to user defined callback */
-      twi_onSlaveReceive(twi_rxBuffer, twi_rxBufferIndex);
-    }
     twi_state =  TWI_IDLE;
   }
 }
+
 

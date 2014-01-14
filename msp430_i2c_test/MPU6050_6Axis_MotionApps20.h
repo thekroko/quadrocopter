@@ -74,48 +74,36 @@ bool MPU6050::dmpPacketAvailable() {
     return getFIFOCount() >= dmpGetFIFOPacketSize();
 }
 
-uint8_t MPU6050::dmpGetQuaternion(int32_t *data, const uint8_t* packet) {
+void MPU6050::dmpGetQuaternion(int32_t *data, const uint8_t* packet) {
     // TODO: accommodate different arrangements of sent data (ONLY default supported now)
-    if (packet == 0) packet = dmpPacketBuffer;
     data[0] = (((int32_t)packet[0] << 24) + ((int32_t)packet[1] << 16) + ((int32_t)packet[2] << 8) + packet[3]);
     data[1] = (((int32_t)packet[4] << 24) + ((int32_t)packet[5] << 16) + ((int32_t)packet[6] << 8) + packet[7]);
     data[2] = (((int32_t)packet[8] << 24) + ((int32_t)packet[9] << 16) + ((int32_t)packet[10] << 8) + packet[11]);
     data[3] = (((int32_t)packet[12] << 24) + ((int32_t)packet[13] << 16) + ((int32_t)packet[14] << 8) + packet[15]);
-    return 0;
 }
-uint8_t MPU6050::dmpGetQuaternion(int16_t *data, const uint8_t* packet) {
+void MPU6050::dmpGetQuaternion(int16_t *data, const uint8_t* packet) {
     // TODO: accommodate different arrangements of sent data (ONLY default supported now)
-    if (packet == 0) packet = dmpPacketBuffer;
     data[0] = (((int16_t)packet[0] << 8) + packet[1]);
     data[1] = (((int16_t)packet[4] << 8) + packet[5]);
     data[2] = (((int16_t)packet[8] << 8) + packet[9]);
     data[3] = (((int16_t)packet[12] << 8) + packet[13]);
-    return 0;
 }
-uint8_t MPU6050::dmpGetQuaternion(Quaternion *q, const uint8_t* packet) {
+void MPU6050::dmpGetQuaternion(Quaternion *q, const uint8_t* packet) {
     // TODO: accommodate different arrangements of sent data (ONLY default supported now)
     int16_t qI[4];
-    uint8_t status = dmpGetQuaternion(qI, packet);
-    if (status == 0) {
-        q -> w = (float)qI[0] / 16384.0f;
-        q -> x = (float)qI[1] / 16384.0f;
-        q -> y = (float)qI[2] / 16384.0f;
-        q -> z = (float)qI[3] / 16384.0f;
-        return 0;
-    }
-    return status; // int16 return value, indicates error if this line is reached
+    dmpGetQuaternion(qI, packet);
+    q -> w = (float)qI[0] / 16384.0f;
+    q -> x = (float)qI[1] / 16384.0f;
+    q -> y = (float)qI[2] / 16384.0f;
+    q -> z = (float)qI[3] / 16384.0f;
 }
 uint8_t MPU6050::dmpGetGyro(int32_t *data, const uint8_t* packet) {
-    // TODO: accommodate different arrangements of sent data (ONLY default supported now)
-    if (packet == 0) packet = dmpPacketBuffer;
     data[0] = (((int32_t)packet[16] << 24) + ((int32_t)packet[17] << 16) + ((int32_t)packet[18] << 8) + packet[19]);
     data[1] = (((int32_t)packet[20] << 24) + ((int32_t)packet[21] << 16) + ((int32_t)packet[22] << 8) + packet[23]);
     data[2] = (((int32_t)packet[24] << 24) + ((int32_t)packet[25] << 16) + ((int32_t)packet[26] << 8) + packet[27]);
     return 0;
 }
 uint8_t MPU6050::dmpGetGyro(int16_t *data, const uint8_t* packet) {
-    // TODO: accommodate different arrangements of sent data (ONLY default supported now)
-    if (packet == 0) packet = dmpPacketBuffer;
     data[0] = ((int16_t)packet[16] << 8) + packet[17];
     data[1] = ((int16_t)packet[20] << 8) + packet[21];
     data[2] = ((int16_t)packet[24] << 8) + packet[25];
@@ -137,11 +125,10 @@ uint8_t MPU6050::dmpGetLinearAccelInWorld(VectorInt16 *v, VectorInt16 *vReal, Qu
     v -> rotate(q);
     return 0;
 }
-uint8_t MPU6050::dmpGetGravity(VectorFloat *v, Quaternion *q) {
+void MPU6050::dmpGetGravity(VectorFloat *v, Quaternion *q) {
     v -> x = 2 * (q -> x*q -> z - q -> w*q -> y);
     v -> y = 2 * (q -> w*q -> x + q -> y*q -> z);
     v -> z = q -> w*q -> w - q -> x*q -> x - q -> y*q -> y + q -> z*q -> z;
-    return 0;
 }
 
 uint8_t MPU6050::dmpGetEuler(float *data, Quaternion *q) {
@@ -151,7 +138,7 @@ uint8_t MPU6050::dmpGetEuler(float *data, Quaternion *q) {
     return 0;
 }
 uint8_t MPU6050::dmpGetYawPitchRoll(float *data, Quaternion *q, VectorFloat *gravity) {
-    // yaw: (about Z axis)
+    /// yaw: (about Z axis)
     data[0] = atan2(2*q -> x*q -> y - 2*q -> w*q -> z, 2*q -> w*q -> w + 2*q -> x*q -> x - 1);
     // pitch: (nose up/down, about Y axis)
     data[1] = atan(gravity -> x / sqrt(gravity -> y*gravity -> y + gravity -> z*gravity -> z));

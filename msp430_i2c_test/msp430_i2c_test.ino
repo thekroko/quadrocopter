@@ -4,11 +4,12 @@
 #define RAD2DEG (180.0/M_PI)
 
 // Components
+#include "twi2.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 
 #define STACK_MAGIC 0x3F
 uint8_t* ramEnd; // this ends up in the far end of the ram, next to the stack. (but before our includes)
-inline void checkStack(char c) {
+inline void checkStack(char c) { // this takes ~63us
   if (*ramEnd != STACK_MAGIC) {
     // memory has been corrupted by something
     Serial.print("!!!STACK OVERFLOW @ "); Serial.print(c); Serial.println("!!!");
@@ -55,7 +56,7 @@ void setup() {
     // Setup a cycle timer to measure performance
     TA1CTL = TASSEL_2 + MC_2 + ID_3; // SMCLK/8, count to 
     TA1CCTL0 = 0;
-    checkStack('S');
+    //checkStack('S');
     
     // Wait for mpu init
     bool init;
@@ -63,12 +64,7 @@ void setup() {
       while (!Serial.available()) ;
       while (Serial.available()) Serial.read();
       Serial.println("MPU INIT");
-      
       mpu.initialize();
-      Serial.print("DEV ID: "); Serial.flush(); 
-      Serial.println(mpu.getDeviceID());
-
-      Serial.println("TEST CONNECTION"); Serial.flush();
       init = mpu.testConnection();
       if (init) {
         if (mpu.resetFIFO()) Serial.println("resetFiFo failed");
@@ -88,34 +84,35 @@ bool handleIMU() {
   // Check for overflows
   if (fifoCount >= DMP_PACKET_SIZE*5) {
     // Data is beginning to stack in our FIFO, and all the values out there are way outdated now ..
-    mpu.resetFIFO();
+    mpu.resetFIFO(); // we have a massive overflow ..
     Serial.println(F("FIFO!"));
+    return false;
   } else { // data ready
      // WARNING: this assumes a fixed size of 42 bytes @ pak!
      // We do this so that we can efficiently flush our TWI buffer as things are happening
      if (mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */)) Serial.println("read failed");
-     MEASURE("IMU-getBytes");
+     
+     // Start discarding the remainder of the packet
+     int toRemove = DMP_PACKET_SIZE - DMP_BUFF_SIZE;
+     if (fifoCount >= DMP_PACKET_SIZE*3) {
+       toRemove += DMP_PACKET_SIZE; // buffer is getting too full; drop this package
+       Serial.println("D!");
+     }
+     mpu.getFIFOBytes(0, DMP_PACKET_SIZE - DMP_BUFF_SIZE); // this should not block
+     
      Quaternion q;           // [w, x, y, z]         quaternion container
      VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
-     mpu.getFIFOBytes(fifoBuffer, 7); // discard
-     MEASURE("IMU-getQuaternion");
      mpu.dmpGetGravity(&gravity, &q);
-     mpu.getFIFOBytes(fifoBuffer, 7); // discard
-     MEASURE("IMU-getGravity");
-     checkStack('X');
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); // /!\ Deepest point in the stack
-     checkStack('D');
-     mpu.getFIFOBytes(fifoBuffer, 12); // discard
-     MEASURE("IMU-getYPR");
+     //checkStack('D');
+     twi_flush();
      return true;
   }
 }
 
 void loop() {
-  checkStack('M');
   RESET_MEASURE // reset timer
-  
   if (handleIMU()) {
     if ((tick++) == 0) {
       Serial.print("YPR ");
@@ -125,9 +122,9 @@ void loop() {
     }
   } 
   MEASURE("Loop");
-  
-  // Give some status & frequency indicator
-  if (tick == 0) {
+
+  // Give some status & frequency indicator -- this takes 70us however
+  /*if (tick == 0) {
     digitalWrite(LED, true);
-  } else if (tick == 127) digitalWrite(LED, false);
+  } else if (tick == 127) digitalWrite(LED, false);*/
 }
