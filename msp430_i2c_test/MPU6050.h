@@ -632,7 +632,7 @@ class MPU6050 {
         bool getI2CMasterModeEnabled();
         void setI2CMasterModeEnabled(bool enabled);
         void switchSPIEnabled(bool enabled);
-        void resetFIFO();
+        uint8_t resetFIFO();
         void resetI2CMaster();
         void resetSensors();
 
@@ -669,7 +669,7 @@ class MPU6050 {
         // FIFO_R_W register
         uint8_t getFIFOByte();
         void setFIFOByte(uint8_t data);
-        void getFIFOBytes(uint8_t *data, uint8_t length);
+        uint8_t getFIFOBytes(uint8_t *data, uint8_t length);
 
         // WHO_AM_I register
         uint8_t getDeviceID();

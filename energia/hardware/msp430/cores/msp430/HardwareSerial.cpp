@@ -61,7 +61,7 @@
 #define UCAxIFG       UCA0IFG
 #define UCAxIV        UCA0IV
 
-#define SERIAL_BUFFER_SIZE 8
+#define SERIAL_BUFFER_SIZE 16
 
 struct ring_buffer
 {
@@ -72,10 +72,6 @@ struct ring_buffer
 
 ring_buffer rx_buffer  =  { { 0 }, 0, 0 };
 ring_buffer tx_buffer  =  { { 0 }, 0, 0 };
-#ifdef SERIAL1_AVAILABLE
-ring_buffer rx_buffer1  =  { { 0 }, 0, 0 };
-ring_buffer tx_buffer1  =  { { 0 }, 0, 0 };
-#endif
 
 inline void store_char(unsigned char c, ring_buffer *buffer)
 {
@@ -93,17 +89,9 @@ inline void store_char(unsigned char c, ring_buffer *buffer)
 
 void serialEvent() __attribute__((weak));
 void serialEvent() {}
-#ifdef SERIAL1_AVAILABLE
-void serialEvent1() __attribute__((weak));
-void serialEvent1() {}
-#endif
 
 void serialEventRun(void)
 {
-	if (Serial.available()) serialEvent();
-#ifdef SERIAL1_AVAILABLE
-	if (Serial1.available()) serialEvent1();
-#endif
 }
 
 // Public Methods //////////////////////////////////////////////////////////////

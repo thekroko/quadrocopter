@@ -4,7 +4,6 @@
 #define RAD2DEG (180.0/M_PI)
 
 // Components
-#include "TI_USCI_I2C_master.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 
 #define STACK_MAGIC 0x3F
@@ -59,47 +58,23 @@ void setup() {
     checkStack('S');
     
     // Wait for mpu init
-    
-  BCSCTL1 = CALBC1_8MHZ; 
-  DCOCTL = CALDCO_8MHZ;
-
-  _EINT();
     bool init;
     do {
-      // Release I2C
-      TI_USCI_I2C_off();
-      pinMode(P1_6, INPUT_PULLUP);
-      pinMode(P1_7, INPUT_PULLUP);
-      
       while (!Serial.available()) ;
       while (Serial.available()) Serial.read();
       Serial.println("MPU INIT");
       
       mpu.initialize();
       Serial.print("DEV ID: "); Serial.flush(); 
-     
-      uint8_t buffer[2];
-      buffer[0] = MPU6050_RA_WHO_AM_I;
-      while (TI_USCI_I2C_notready()) ;
-      Serial.print('x'); Serial.flush();
-      TI_USCI_I2C_restart();
-      TI_USCI_I2C_transmit(1, buffer);
-      Serial.print('x'); Serial.flush();
-      while (TI_USCI_I2C_notready()) ;
-      Serial.print('x'); Serial.flush();
-      buffer[0] = 0xFF;
-      TI_USCI_I2C_receive(1, buffer);
-      delay(5);
-      Serial.print('x'); Serial.flush();
-      while (TI_USCI_I2C_notready()) ;
-      Serial.print(buffer[0]);
+      Serial.println(mpu.getDeviceID());
 
       Serial.println("TEST CONNECTION"); Serial.flush();
       init = mpu.testConnection();
       if (init) {
+        if (mpu.resetFIFO()) Serial.println("resetFiFo failed");
+        uint16_t fifoCount = mpu.getFIFOCount();
+        Serial.println(fifoCount);
         Serial.println("CONNECTION OK");
-        mpu.resetFIFO();
-        mpu.getIntStatus();
         Serial.println("DMP ready");
       } else Serial.println("IMU not found");
     } while (!init);
@@ -107,20 +82,18 @@ void setup() {
 
 bool handleIMU() {
   // Check if we have a new packet
-  uint16_t fifoCount = mpu.getFIFOCount();
+  uint16_t fifoCount = mpu.getFIFOCount();;
   if (fifoCount < DMP_PACKET_SIZE) return false; // not yet ready
   
   // Check for overflows
-  uint8_t mpuIntStatus = mpu.getIntStatus();
-  if ((mpuIntStatus & 0x10) || fifoCount >= 42*3 /* too many old frames... */) {
-    // reset so we can continue cleanly3
+  if (fifoCount >= DMP_PACKET_SIZE*5) {
+    // Data is beginning to stack in our FIFO, and all the values out there are way outdated now ..
     mpu.resetFIFO();
     Serial.println(F("FIFO!"));
-    return false;
-  } else if (mpuIntStatus & 0x02) { // data ready
+  } else { // data ready
      // WARNING: this assumes a fixed size of 42 bytes @ pak!
      // We do this so that we can efficiently flush our TWI buffer as things are happening
-     mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */);
+     if (mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */)) Serial.println("read failed");
      MEASURE("IMU-getBytes");
      Quaternion q;           // [w, x, y, z]         quaternion container
      VectorFloat gravity;    // [x, y, z]            gravity vector

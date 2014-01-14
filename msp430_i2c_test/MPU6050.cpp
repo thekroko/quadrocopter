@@ -35,7 +35,7 @@ THE SOFTWARE.
 */
 
 #include "MPU6050.h"
-#include "TI_USCI_I2C_master.h"
+#include "twi2.h"
 
 /** Default constructor, uses default I2C address.
  * @see MPU6050_DEFAULT_ADDRESS
@@ -62,7 +62,7 @@ MPU6050::MPU6050(uint8_t address) {
  * the default internal clock source.
  */
 void MPU6050::initialize() {
-    TI_USCI_I2C_init(devAddr);
+  twi_init();
 }
 
 /** Verify the I2C connection.
@@ -83,9 +83,10 @@ bool MPU6050::testConnection() {
  * @see MPU6050_RA_INT_STATUS
  */
 uint8_t MPU6050::getIntStatus() {
-    //I2Cdev::readByte(devAddr, MPU6050_RA_INT_STATUS, buffer);
-    //return buffer[0];
-    return 0;
+    buffer[0] = MPU6050_RA_INT_STATUS;
+    if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
+    if (twi_readFrom(devAddr, buffer, 1, true) != 1) return 0xFF;
+    return buffer[0];
 }
 
 /** Reset the FIFO.
@@ -94,8 +95,13 @@ uint8_t MPU6050::getIntStatus() {
  * @see MPU6050_RA_USER_CTRL
  * @see MPU6050_USERCTRL_FIFO_RESET_BIT
  */
-void MPU6050::resetFIFO() {
-    //I2Cdev::writeBit(devAddr, MPU6050_RA_USER_CTRL, MPU6050_USERCTRL_FIFO_RESET_BIT, true);
+uint8_t MPU6050::resetFIFO() {
+  buffer[0] = MPU6050_RA_USER_CTRL;
+  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
+  if (twi_readFrom(devAddr, buffer+1, 1, false) != 1) return 0xFF;
+  buffer[1] |= (1 << MPU6050_USERCTRL_FIFO_RESET_BIT);
+  if (twi_writeTo(devAddr, buffer, 2, true, true)) return 0xFF;
+  return 0;
 }
 
 // FIFO_COUNT* registers
@@ -108,9 +114,10 @@ void MPU6050::resetFIFO() {
  * @return Current FIFO buffer size
  */
 uint16_t MPU6050::getFIFOCount() {
-    //I2Cdev::readBytes(devAddr, MPU6050_RA_FIFO_COUNTH, 2, buffer);
-    //return (((uint16_t)buffer[0]) << 8) | buffer[1];
-    return 0;
+  buffer[0] = MPU6050_RA_FIFO_COUNTH;
+  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFFFF;
+  if (twi_readFrom(devAddr, buffer, 2, true) != 2) return 0xFFFF;
+  return (((uint16_t)buffer[0]) << 8) | buffer[1];
 }
 
 // FIFO_R_W register
@@ -140,8 +147,15 @@ uint16_t MPU6050::getFIFOCount() {
  *
  * @return Byte from FIFO buffer
  */
-void MPU6050::getFIFOBytes(uint8_t *data, uint8_t length) {
-    //I2Cdev::readBytes(devAddr, MPU6050_RA_FIFO_R_W, length, data);
+uint8_t MPU6050::getFIFOBytes(uint8_t *data, uint8_t length) {
+  buffer[0] = MPU6050_RA_FIFO_R_W;
+  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
+  while (length > 0) {
+    int read = twi_readFrom(devAddr, data, length, true);
+    data += read;
+    length -= read;
+  }
+  return 0;
 }
 
 // WHO_AM_I register
@@ -154,13 +168,9 @@ void MPU6050::getFIFOBytes(uint8_t *data, uint8_t length) {
  * @see MPU6050_WHO_AM_I_LENGTH
  */
 uint8_t MPU6050::getDeviceID() {
-    buffer[0] = MPU6050_RA_WHO_AM_I;
-    while (TI_USCI_I2C_notready()) ;
-    //TI_USCI_I2C_restart();
-    TI_USCI_I2C_transmit(1, buffer);
-    while (TI_USCI_I2C_notready()) ;
-    TI_USCI_I2C_receive(1, buffer);
-    while (TI_USCI_I2C_notready()) ;
-    return buffer[0] & 0b111111;
+  buffer[0] = MPU6050_RA_WHO_AM_I;
+  if (twi_writeTo(devAddr, buffer, 1, true, false)) return 0xFF;
+  if (twi_readFrom(devAddr, buffer, 1, true) != 1) return 0xFE;
+  return (buffer[0] >> 1) & 0b111111;
 }
 
