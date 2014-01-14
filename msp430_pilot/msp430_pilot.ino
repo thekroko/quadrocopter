@@ -124,8 +124,8 @@ void setup() {
     // Initialize all floats (printing crashes device otherwise)
     ramEnd = (uint8_t*)malloc(1);
     *ramEnd = STACK_MAGIC;
-    for (int i = 0; i < 3; i++) ypr[i] = i+1;
-    for (int i = 0; i < 4; i++) targetYPRS[i] = i+1;
+    for (int i = 0; i < 3; i++) ypr[i] = 0;
+    for (int i = 0; i < 4; i++) targetYPRS[i] = 0;
     memset(&pidC, 0, sizeof(PIDConfig) * PIDS);
     memset(&pidD, 0, sizeof(PIDData) * PIDS);
 
