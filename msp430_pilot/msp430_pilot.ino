@@ -110,9 +110,9 @@ void setMotors(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br) { // values i
 }
 
 uint16_t makeSpeed(float speed) {
-  if (speed >= 1000.0) return 1000;
+  if (speed >= 100.0) return 1000;
   if (speed <= 0.0) return 0;
-  return (uint16_t)speed;
+  return (uint16_t)(speed * 10.0);
 }
 
 // -----------------------------------

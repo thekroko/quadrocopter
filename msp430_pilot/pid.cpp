@@ -10,7 +10,7 @@ float updatePID(PIDConfig &pidc, PIDData &pid, float &input, float &target) {
   if (pid.errorSum < pidc.minI) pid.errorSum = pidc.minI;
   
   // Update D (damper)
-  float ddt_error = -pidc.kD * (input - pid.lastInput);
+  float ddt_error = pidc.kD * (input - pid.lastInput);
   pid.lastInput = input;
   
   // Calculate output

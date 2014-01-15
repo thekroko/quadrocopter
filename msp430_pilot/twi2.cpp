@@ -182,13 +182,27 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length)
   }
 
   /* Ensure stop condition got sent before we exit. */
-  while (UCB0CTL1 & UCTXSTP);
+  int j = 0;    
+  while (UCB0CTL1 & UCTXSTP) { // end with stop condition
+    if (j++ > 40) {
+      // Dirty hack. We sometimes get stuck here when handling UART interrupts while this code is running.
+      // This seems to fix it without breaking anything ...
+      UCB0CTL1 &= ~UCTXSTP;
+    }
+  }
   return length - twi_rxLength;
 }
 
 void twi_flush(void) {
   while( twi_state != TWI_IDLE) ;
-  while (UCB0CTL1 & UCTXSTP) ;
+  int i = 0;    
+  while (UCB0CTL1 & UCTXSTP) { // end with stop condition
+    if (i++ > 40) {
+      // Dirty hack. We sometimes get stuck here when handling UART interrupts while this code is running.
+      // This seems to fix it without breaking anything ...
+      UCB0CTL1 &= ~UCTXSTP;
+    }
+  }
 }
 
 /*
@@ -248,7 +262,7 @@ uint8_t twi_writeTo(uint8_t address, uint8_t* data, uint8_t length, uint8_t wait
   if(sendStop) {
     int i = 0;    
     while (UCB0CTL1 & UCTXSTP) { // end with stop condition
-      if (i++ > 32) {
+      if (i++ > 40) {
         // Dirty hack. We sometimes get stuck here when handling UART interrupts while this code is running.
         // This seems to fix it without breaking anything ...
         UCB0CTL1 &= ~UCTXSTP;
