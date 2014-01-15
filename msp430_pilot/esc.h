@@ -9,5 +9,6 @@
 void initESCs();
 void setESCs(uint16_t tl, uint16_t tr, uint16_t bl, uint16_t br); // values from 0 to 1000
 void dbg();
+uint16_t getEscExecutionTime();
 
 #endif

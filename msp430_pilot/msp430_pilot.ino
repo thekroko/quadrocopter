@@ -43,8 +43,7 @@ uint8_t mode; // statis in here @ high
 #define BITS_MODE (0b111)
 
 // Components
-#include "I2Cdev.h"
-#include "Wire.h"
+#include "twi2.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "pid.h"
 #include "esc.h"
@@ -140,11 +139,9 @@ void setup() {
     digitalWrite(LED, LOW);
     
     // Initialize Servos
-    checkStack('I');
     initESCs();
 
     // Calibrate?
-    
     if (!wasReset) {
       Serial.println("INIT Calibrating ESCs..");
       setESCs(1000, 1000, 1000, 1000);
@@ -157,44 +154,47 @@ void setup() {
     // All done
     Serial.println("RDY All ready!");
     
+#ifndef RELEASE
     // Setup a cycle timer to measure performance
     TA1CTL = TASSEL_2 + MC_2 + ID_3; // SMCLK/8, count to 
     TA1CCTL0 = 0;
+#endif
     checkStack('S');
 }
 
-bool handleIMU() {
-  // IMU has not yet been initialized. Don't do anything
+inline bool handleIMU() {
   if (!(mode & BIT_DMP)) return false;
   
   // Check if we have a new packet
-  uint16_t fifoCount = mpu.getFIFOCount();
+  uint16_t fifoCount = mpu.getFIFOCount();;
   if (fifoCount < DMP_PACKET_SIZE) return false; // not yet ready
   
   // Check for overflows
-  uint8_t mpuIntStatus = mpu.getIntStatus();
-  if ((mpuIntStatus & 0x10) || fifoCount >= 42*3 /* too many old frames... */) {
-    // reset so we can continue cleanly3
-    mpu.resetFIFO();
+  if (fifoCount >= DMP_PACKET_SIZE*5) {
+    // Data is beginning to stack in our FIFO, and all the values out there are way outdated now ..
+    mpu.resetFIFO(); // we have a massive overflow ..
     Serial.println(F("FIFO!"));
-  } else if (mpuIntStatus & 0x02) { // data ready
+    return false;
+  } else { // data ready
      // WARNING: this assumes a fixed size of 42 bytes @ pak!
      // We do this so that we can efficiently flush our TWI buffer as things are happening
-     mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */);
-     //MEASURE("IMU-getBytes");
+     if (mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */)) Serial.println("read failed");
+     
+     // Start discarding the remainder of the packet
+     int toRemove = DMP_PACKET_SIZE - DMP_BUFF_SIZE;
+     if (fifoCount >= DMP_PACKET_SIZE*3) {
+       toRemove += DMP_PACKET_SIZE; // buffer is getting too full; drop this package
+       Serial.println("DROP");
+     }
+     mpu.getFIFOBytes(0, DMP_PACKET_SIZE - DMP_BUFF_SIZE); // this should not block
+     
      Quaternion q;           // [w, x, y, z]         quaternion container
      VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
-     mpu.getFIFOBytes(fifoBuffer, 7); // discard
-     //MEASURE("IMU-getQuaternion");
      mpu.dmpGetGravity(&gravity, &q);
-     mpu.getFIFOBytes(fifoBuffer, 7); // discard
-     //MEASURE("IMU-getGravity");
-     checkStack('X');
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); // /!\ Deepest point in the stack
      checkStack('D');
-     mpu.getFIFOBytes(fifoBuffer, 12); // discard
-     //MEASURE("IMU-getYPR");
+     twi_flush();
      return true;
   }
 }
@@ -268,14 +268,14 @@ void handleInput() {
     // Init DMP & I2C
     case 0x0A: {
       Serial.println("DMP init..");
-      Wire.begin();
       mode &= ~BIT_DMP;
+      mpu.initialize();
       bool init = mpu.testConnection();
       if (init) {
         mode |= BIT_DMP;
+        Serial.print("DMP ready ");
         mpu.resetFIFO();
-        mpu.getIntStatus();
-        Serial.println("DMP ready");
+        Serial.println(mpu.getFIFOCount());
       } else Serial.println("IMU not found");
       break;
     }
@@ -378,13 +378,11 @@ void handleInput() {
 
 
 void loop() {
-  checkStack('M');
+  // Main loop execution roughly takes 12ms (= 83Hz), but we are limited by the DMP sensor settings (66 or 100 Hz)
   RESET_MEASURE // reset timer
-  
+
   if (handleIMU()) {
-    checkStack('I');
     handlePIDs();
-    checkStack('P');
   } 
   handleInput();
   MEASURE("Loop");
@@ -393,5 +391,12 @@ void loop() {
   if (tick++ == 0) {
     mode ^= BIT_LED;
     digitalWrite(LED, mode & BIT_LED);
+    
+    /*Serial.print("YPR ");
+    for (int i = 0; i < 3; i++) {
+      Serial.print(ypr[i] * RAD2DEG); Serial.print(i == 2 ? '\n' : ' ');      
+    }
+    Serial.print("ESC ");
+    Serial.println(getEscExecutionTime());*/
   }
 }

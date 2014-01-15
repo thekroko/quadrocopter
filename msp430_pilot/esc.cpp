@@ -6,19 +6,34 @@ uint16_t activeSpeeds[4];
 uint16_t nextSpeeds[4];
 uint16_t elapsed;
 uint8_t toExpire;
+uint8_t randomization = 0;
 
 #define P_TL P1_5
 #define P_TR P1_4
 #define P_BL P2_0
 #define P_BR P2_1
 
-#define HZ 490 // must be <= 490
+#define HZ 480 // must be <= 490
 #define PERIOD (1000000L / HZ * TICKS_PER_US)
 #define TICKS_PER_US 2
-#define TRIM_US 0
+#define TRIM_US 2
+
+static volatile uint16_t _escExecutionTime = 123;
+
+uint16_t getEscExecutionTime() {
+  return _escExecutionTime;
+}
+
 
 static void TimerA(void) {
-  uint16_t wait;
+  //TA1R = 0;
+  TA0CCTL0 &= ~CCIE; // disable interrupt
+  __bis_SR_register(GIE);    // reenable interrupts (required for i2c)
+  
+  // This loop roughly takes 28us to execute
+  // -> we only got 2% timer accuracy roughly. but we try to fix this by randomizing the order so that we're closer to that
+  
+  int16_t wait;
   do {
     // Timer tick. Operate based upon state.
     if (elapsed >= PERIOD) { // all ESCs have to be off/done by now; start a new tick
@@ -28,7 +43,9 @@ static void TimerA(void) {
       digitalWrite(P_BR, HIGH);
       elapsed = 0;
       for (int i = 0; i < 4; i++)
-        activeSpeeds[i] = nextSpeeds[i];
+        activeSpeeds[i] = nextSpeeds[i] - (randomization == i ? 16 : 0);
+      // We use speed-1 so that on average the loop execution delay won't influence the behavior
+      randomization = (randomization + 1) % 4;
     }
     else {
       // Check for expired timers
@@ -50,10 +67,14 @@ static void TimerA(void) {
         toExpire = i;
       }
     }
-    wait -= elapsed;
-  } while (wait == 0);
+    elapsed += 29; // also consider this loop execution
+    wait -= (int16_t)elapsed;
+  } while (wait <= 0);
+   __bic_SR_register(GIE);    // reenable interrupts
+  TA0CCTL0 |= CCIE; // disable interrupt
   TA0CCR0 = wait;
   elapsed += wait;
+  //_escExecutionTime = TA1R;
 }
 
 __attribute__((interrupt(TIMER0_A0_VECTOR))) static void Timer_A_int(void) { TimerA(); }
@@ -78,6 +99,7 @@ void initESCs() {
   elapsed = 0xFFFF;
   
   // Enable timers
+  _escExecutionTime = 0xFFFF;
   TA0CCTL0 = CCIE; // interrupt
   TA0CTL = TASSEL_2 + MC_1 + ID_3; // prescale SMCLK/8, upmode => 2 ticks per us
   TA0CCR0 = 10; // small countdown

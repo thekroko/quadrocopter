@@ -37,9 +37,7 @@ THE SOFTWARE.
 #ifndef _MPU6050_H_
 #define _MPU6050_H_
 
-#include "I2Cdev.h"
-//#include <avr/pgmspace.h>
-
+#include <inttypes.h>
 
 
 #define MPU6050_ADDRESS_AD0_LOW     0x68 // address pin low (GND), default for InvenSense evaluation board
@@ -634,7 +632,7 @@ class MPU6050 {
         bool getI2CMasterModeEnabled();
         void setI2CMasterModeEnabled(bool enabled);
         void switchSPIEnabled(bool enabled);
-        void resetFIFO();
+        uint8_t resetFIFO();
         void resetI2CMaster();
         void resetSensors();
 
@@ -671,7 +669,7 @@ class MPU6050 {
         // FIFO_R_W register
         uint8_t getFIFOByte();
         void setFIFOByte(uint8_t data);
-        void getFIFOBytes(uint8_t *data, uint8_t length);
+        uint8_t getFIFOBytes(uint8_t *data, uint8_t length);
 
         // WHO_AM_I register
         uint8_t getDeviceID();
@@ -813,9 +811,9 @@ class MPU6050 {
             uint8_t dmpGetAccel(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetAccel(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGetAccel(VectorInt16 *v, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(int16_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(Quaternion *q, const uint8_t* packet=0);
+            void dmpGetQuaternion(int32_t *data, const uint8_t* packet=0);
+            void dmpGetQuaternion(int16_t *data, const uint8_t* packet=0);
+            void dmpGetQuaternion(Quaternion *q, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(Quaternion *q, const uint8_t* packet=0);
@@ -842,10 +840,10 @@ class MPU6050 {
             uint8_t dmpGetGyroSensor(VectorInt16 *v, const uint8_t* packet=0);
             uint8_t dmpGetControlData(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetTemperature(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(int16_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(VectorInt16 *v, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(VectorFloat *v, Quaternion *q);
+            void dmpGetGravity(int32_t *data, const uint8_t* packet=0);
+            void dmpGetGravity(int16_t *data, const uint8_t* packet=0);
+            void dmpGetGravity(VectorInt16 *v, const uint8_t* packet=0);
+            void dmpGetGravity(VectorFloat *v, Quaternion *q);
             uint8_t dmpGetUnquantizedAccel(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetUnquantizedAccel(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGetUnquantizedAccel(VectorInt16 *v, const uint8_t* packet=0);
@@ -863,7 +861,7 @@ class MPU6050 {
             uint8_t dmpGetQuaternionFloat(float *data, const uint8_t* packet=0);
 
             uint8_t dmpProcessFIFOPacket(const unsigned char *dmpData);
-            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed=NULL);
+            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed);
 
             uint8_t dmpSetFIFOProcessedCallback(void (*func) (void));
 
@@ -914,9 +912,9 @@ class MPU6050 {
             uint8_t dmpGetAccel(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetAccel(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGetAccel(VectorInt16 *v, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(int16_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetQuaternion(Quaternion *q, const uint8_t* packet=0);
+            void dmpGetQuaternion(int32_t *data, const uint8_t* packet=0);
+            void dmpGetQuaternion(int16_t *data, const uint8_t* packet=0);
+            void dmpGetQuaternion(Quaternion *q, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGet6AxisQuaternion(Quaternion *q, const uint8_t* packet=0);
@@ -944,10 +942,10 @@ class MPU6050 {
             uint8_t dmpGetGyroSensor(VectorInt16 *v, const uint8_t* packet=0);
             uint8_t dmpGetControlData(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetTemperature(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(int32_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(int16_t *data, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(VectorInt16 *v, const uint8_t* packet=0);
-            uint8_t dmpGetGravity(VectorFloat *v, Quaternion *q);
+            void dmpGetGravity(int32_t *data, const uint8_t* packet=0);
+            void dmpGetGravity(int16_t *data, const uint8_t* packet=0);
+            void dmpGetGravity(VectorInt16 *v, const uint8_t* packet=0);
+            void dmpGetGravity(VectorFloat *v, Quaternion *q);
             uint8_t dmpGetUnquantizedAccel(int32_t *data, const uint8_t* packet=0);
             uint8_t dmpGetUnquantizedAccel(int16_t *data, const uint8_t* packet=0);
             uint8_t dmpGetUnquantizedAccel(VectorInt16 *v, const uint8_t* packet=0);
@@ -965,7 +963,7 @@ class MPU6050 {
             uint8_t dmpGetQuaternionFloat(float *data, const uint8_t* packet=0);
 
             uint8_t dmpProcessFIFOPacket(const unsigned char *dmpData);
-            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed=NULL);
+            uint8_t dmpReadAndProcessFIFOPacket(uint8_t numPackets, uint8_t *processed);
 
             uint8_t dmpSetFIFOProcessedCallback(void (*func) (void));
 
@@ -981,7 +979,7 @@ class MPU6050 {
 
     private:
         uint8_t devAddr;
-        uint8_t buffer[2 /* this is terrible ... 14*/];
+        uint8_t buffer[2];
 };
 
 #endif /* _MPU6050_H_ */
