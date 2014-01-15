@@ -21,14 +21,16 @@ sleep 0.3s
 sleep 0.3s
 ./msp mode= 0 # OFF!
 
-#./msp typr= 0.0 0.0 0.0 0.0
-#./msp pidmask= 10010111 # only allow speed control
 
-./msp typr= 0.0 0.0 0.0 66.0
-./msp pidmask= 10010001 # only disable yaw, and the TL/BR motors
-./msp pid= 0 35 5 0.0 0 0 -33 33 # yaw
-./msp pid= 1 35 5 0.0 0 0 -33 33 # pitch
-./msp pid= 2 35 5 0.0 0 0 -33 33 # roll
+./msp typr= 0.0 0.0 0.0 0.0
+./msp pidmask= 10010111 # only allow speed control
+
+#./msp typr= 0.0 0.0 0.0 66.0
+#./msp pidmask= 10010001 # only disable yaw, and the TL/BR motors
+
+./msp pid= 0 35 0 0.0 0 0 -33 33 # yaw
+./msp pid= 1 35 0 0.0 0 0 -33 33 # pitch
+./msp pid= 2 35 0 0.0 0 0 -33 33 # roll
 ./msp mode= 1
 
 echo "Press ENTER to stop"
