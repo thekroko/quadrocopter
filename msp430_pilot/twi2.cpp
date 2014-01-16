@@ -50,10 +50,6 @@
 #error Only B0 supported
 #endif
 
-#if TWI_FREQ < 400000L
-#error "not 400 khz"
-#endif
-
 static volatile uint8_t twi_state;
 static volatile uint8_t twi_sendStop;           // should the transaction end with a stop
 static volatile uint8_t twi_inRepStart;         // in the middle of a repeated start
@@ -291,7 +287,7 @@ void i2c_txrx_isr(void)  // RX/TX Service
     }
     if (twi_rxLength == 1)
       /* Only one byte left. Generate STOP condition.
-       	       * In master mode a STOP is preceded by a NACK */
+       * In master mode a STOP is preceded by a NACK */
       UCB0CTL1 |= UCTXSTP;
     else if(twi_rxLength == 0) {
       /* All bytes received. We are idle*/

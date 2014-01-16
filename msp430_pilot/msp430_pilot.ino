@@ -27,7 +27,7 @@
 
 #define CMD_SIZE 5
 #define DMP_PACKET_SIZE 42
-#define DMP_BUFF_SIZE 16 // only the quaternion
+#define DMP_BUFF_SIZE 14 // only the quaternion
 
 #if F_CPU != 16000000L
 #error "WRONG F_CPU"
@@ -64,12 +64,12 @@ MPU6050 mpu;
 
 // Global State
 #define __no_init    __attribute__ ((section (".noinit"))) 
-#define RESET_MAGIC 0xAC19
-__no_init uint16_t reset;
-uint8_t tick;
+#define RESET_MAGIC 0xAC
+__no_init uint8_t reset;
 
-volatile uint16_t measure;
 #ifndef RELEASE
+volatile uint16_t measure;
+uint8_t tick;
 #define RESET_MEASURE { measure = TA1R; }
 // Measured maximum time period is limited by motor control frequency.
 void MEASURE(char* x) { 
@@ -96,10 +96,10 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 #define R_YAW    0
 #define R_PITCH  1
 #define R_ROLL   2
-#define PIDS 3
+#define PIDS 6
 #define RAD2DEG (180.0 / M_PI)
 
-float targetYPRS[6];
+float targetYPRS[4];
 PIDConfig pidC[PIDS];
 PIDData pidD[PIDS];
 uint8_t selectedPID;
@@ -181,11 +181,6 @@ inline bool handleIMU() {
      if (mpu.getFIFOBytes(fifoBuffer, DMP_BUFF_SIZE /* 16 */)) Serial.println("read failed");
      
      // Start discarding the remainder of the packet
-     int toRemove = DMP_PACKET_SIZE - DMP_BUFF_SIZE;
-     if (fifoCount >= DMP_PACKET_SIZE*3) {
-       toRemove += DMP_PACKET_SIZE; // buffer is getting too full; drop this package
-       Serial.println("DROP");
-     }
      mpu.getFIFOBytes(0, DMP_PACKET_SIZE - DMP_BUFF_SIZE); // this should not block
      
      Quaternion q;           // [w, x, y, z]         quaternion container
@@ -400,16 +395,4 @@ void loop() {
   else delay(8); // give it some regularity
   handleInput();
   MEASURE("Loop");
-  
-  // Give some status & frequency indicator
-  if (tick++ == 0) {
-    P1OUT ^= (1 << 0);
-    
-    /*Serial.print("YPR ");
-    for (int i = 0; i < 3; i++) {
-      Serial.print(ypr[i] * RAD2DEG); Serial.print(i == 2 ? '\n' : ' ');      
-    }
-    Serial.print("ESC ");
-    Serial.println(getEscExecutionTime());*/
-  }
 }

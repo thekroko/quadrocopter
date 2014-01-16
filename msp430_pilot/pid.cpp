@@ -2,6 +2,7 @@
 
 /*Performs a single PID step */
 float updatePID(PIDConfig &pidc, PIDData &pid, float input, float target) {
+  return 0;
   float error = target - input;
   
   // Update I (prevents freezing)
