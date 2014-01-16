@@ -38,8 +38,8 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
-#define WAIT_FLAG(x,y,onErr) { int __i = 0; while ((x & y)) { if (__i++ >= 128) { x &= ~y; onErr; break; } } }
-#define WAIT_IDLE(ticks,onErr) { int __t = ticks * 9 * 5; int __i = 0; while (twi_state != TWI_IDLE) { if (__i++ >= __t) { twi_state = TWI_IDLE; onErr; break; } } }
+#define WAIT_FLAG(x,y,onErr) { int __i = 0; while ((x & y)) { if (__i++ >= 4096) { x &= ~y; twi_init(); onErr; break; } } }
+#define WAIT_IDLE(ticks,onErr) { int __t = (ticks+10) * 9 * 50; int __i = 0; while (twi_state != TWI_IDLE) { if (__i++ >= __t) { twi_state = TWI_IDLE; twi_init(); onErr; break; } } }
 
 
 #include "wiring_private.h"

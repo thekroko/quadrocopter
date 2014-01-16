@@ -19,7 +19,7 @@
 //   [0x25] .........4-float.........    Set Rate control Motor %
 //   [0x26] bitmask                      Disable PID
 
-//#define RELEASE
+#define RELEASE
 
 // Pinout
 #define LED RED_LED
