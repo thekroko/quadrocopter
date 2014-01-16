@@ -1,4 +1,4 @@
-#include "esc.h"
+#include "foo.h"
 
 #include "Energia.h"
 
@@ -7,9 +7,7 @@
 #define P_BL P2_0
 #define P_BR P2_1
 
-#ifndef HZ
-#error HZ not defined
-#endif
+#define HZ 490 // must be <= 490
 #define PERIOD (1000000L / HZ * TICKS_PER_US)
 #define TICKS_PER_US 2 // ~required time to toggle a pin
 #define TRIM_US 4

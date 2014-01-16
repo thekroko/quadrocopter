@@ -1,5 +1,6 @@
 #!/bin/sh
 # Sends a simple command to the MSP430  controller
+if [ -z "$PORT" ]; then PORT=/dev/ttyAMA0; fi
 if [ -z "$1" ]; then 
   echo "$0 write 0x00 [...] " >&2; 
   echo "$0 reset" >&2; 
@@ -20,7 +21,7 @@ if [ -z "$1" ]; then
 function msp() {
   # Execute
   echo $@
-  echo "0xFF $@" | xxd -r > /dev/ttyAMA0
+  echo "0xFF $@" | xxd -r > $PORT
 }
 function deg2rad() {
   echo "$@ * 3.14159265358979323846 / 180.0" | bc -l

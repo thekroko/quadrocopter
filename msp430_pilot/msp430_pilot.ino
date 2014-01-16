@@ -19,7 +19,7 @@
 //   [0x25] .........4-float.........    Set Rate control Motor %
 //   [0x26] bitmask                      Disable PID
 
-#define RELEASE
+//#define RELEASE
 
 // Pinout
 #define LED RED_LED
@@ -68,12 +68,15 @@ MPU6050 mpu;
 __no_init uint16_t reset;
 uint8_t tick;
 
+volatile uint16_t measure;
 #ifndef RELEASE
-#define RESET_MEASURE { TA1R = 0; }
+#define RESET_MEASURE { measure = TA1R; }
+// Measured maximum time period is limited by motor control frequency.
 void MEASURE(char* x) { 
   if (tick == 0) { 
-    Serial.print(x); Serial.print(": us="); Serial.println((uint32_t)TA1R * 8L / clockCyclesPerMicrosecond()); 
-    Serial.flush(); TA1R = 0;
+    uint16_t t = TA1R < measure ? (TA1CCR0 - measure + TA1R) : TA1R - measure;
+    Serial.print(x); Serial.print(": us="); Serial.println(t / 2); 
+    Serial.flush();
   } 
 }
 #else
@@ -130,7 +133,7 @@ void setup() {
 
     // Make sure RX has a pullup (we get random interference otherwise)
     pinMode(P1_1, INPUT_PULLUP);
-    Serial.begin(115200);
+    Serial.begin(115200); // TODO!
     Serial.println();
     Serial.println("INIT MSP430 starting up..");
     
@@ -153,12 +156,6 @@ void setup() {
     
     // All done
     Serial.println("RDY All ready!");
-    
-#ifndef RELEASE
-    // Setup a cycle timer to measure performance
-    TA1CTL = TASSEL_2 + MC_2 + ID_3; // SMCLK/8, count to 
-    TA1CCTL0 = 0;
-#endif
     checkStack('S');
 }
 
@@ -199,7 +196,7 @@ inline bool handleIMU() {
   }
 }
 
-void handlePIDs() {
+inline void handlePIDs() {
   // Rate control
   float yawCmd =   updatePID(pidC[R_YAW],   pidD[R_YAW],   ypr[0], targetYPRS[0]); // TL rotates right
   float pitchCmd = updatePID(pidC[R_PITCH], pidD[R_PITCH], ypr[1], targetYPRS[1]);
@@ -231,7 +228,7 @@ void handlePIDs() {
   );
 }
 
-void handleInput() {
+inline void handleInput() {
   // Read input. We assume a fixed command width of 5 byte, terminated with 0xFF (=6 byte total)
   if (Serial.available() < 6 || Serial.read() != 0xFF) return; // not yet ready
   uint8_t cmd[5];
@@ -328,7 +325,7 @@ void handleInput() {
     case 0x10: {
       mode &= ~BITS_MODE;
       mode |= MODE_RAW;
-      setMotors((uint16_t)cmd[1]*3L, (uint16_t)cmd[2]*3L, (uint16_t)cmd[3]*3L, (uint16_t)cmd[4]*3L);
+      setMotors((uint16_t)cmd[1]*4L, (uint16_t)cmd[2]*4L, (uint16_t)cmd[3]*4L, (uint16_t)cmd[4]*4L);
       break;
     }
       
@@ -383,14 +380,14 @@ void loop() {
 
   if (handleIMU()) {
     handlePIDs();
-  } 
+  }
+  else delay(8); // give it some regularity
   handleInput();
   MEASURE("Loop");
   
   // Give some status & frequency indicator
   if (tick++ == 0) {
-    mode ^= BIT_LED;
-    digitalWrite(LED, mode & BIT_LED);
+    P1OUT ^= (1 << 0);
     
     /*Serial.print("YPR ");
     for (int i = 0; i < 3; i++) {
