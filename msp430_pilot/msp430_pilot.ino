@@ -87,16 +87,19 @@ void MEASURE(char* x) {
 uint8_t fifoBuffer[DMP_BUFF_SIZE];  // FIFO storage buffer
 
 // orientation/motion vars
+float lastYpr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 // pid stuff
+#define RS_RATE   0
+#define RS_STABLE 3
 #define R_YAW    0
 #define R_PITCH  1
 #define R_ROLL   2
 #define PIDS 3
 #define RAD2DEG (180.0 / M_PI)
 
-float targetYPRS[4];
+float targetYPRS[6];
 PIDConfig pidC[PIDS];
 PIDData pidD[PIDS];
 uint8_t selectedPID;
@@ -189,6 +192,11 @@ inline bool handleIMU() {
      VectorFloat gravity;    // [x, y, z]            gravity vector
      mpu.dmpGetQuaternion(&q, fifoBuffer);
      mpu.dmpGetGravity(&gravity, &q);
+     
+     lastYpr[0] = ypr[0];
+     lastYpr[1] = ypr[1];
+     lastYpr[2] = ypr[2];
+     
      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); // /!\ Deepest point in the stack
      checkStack('D');
      twi_flush();
@@ -197,16 +205,24 @@ inline bool handleIMU() {
 }
 
 inline void handlePIDs() {
-  // Rate control
-  float yawCmd =   updatePID(pidC[R_YAW],   pidD[R_YAW],   ypr[0], targetYPRS[0]); // TL rotates right
-  float pitchCmd = updatePID(pidC[R_PITCH], pidD[R_PITCH], ypr[1], targetYPRS[1]);
-  float rollCmd =  updatePID(pidC[R_ROLL],  pidD[R_ROLL],  ypr[2], targetYPRS[2]);
+  // Stabilization PID
+  float yawCmd = updatePID(pidC[R_YAW+RS_STABLE],   pidD[R_YAW+RS_STABLE],   ypr[0], targetYPRS[0]); // TL rotates right
+  float pitchCmd = updatePID(pidC[R_PITCH+RS_STABLE], pidD[R_PITCH+RS_STABLE], ypr[1], targetYPRS[1]);
+  float rollCmd =  updatePID(pidC[R_ROLL+RS_STABLE],  pidD[R_ROLL+RS_STABLE],  ypr[2], targetYPRS[2]);
   float motorSpeed = targetYPRS[3];
+
+  if (pidDisabled & 0b0001) { // No Stabilization PID
+    yawCmd = targetYPRS[0];
+    pitchCmd = targetYPRS[1];
+    rollCmd = targetYPRS[2];
+  }
   
-  if (pidDisabled & 0b0001) yawCmd = 0;
-  if (pidDisabled & 0b0010) pitchCmd = 0;
-  if (pidDisabled & 0b0100) rollCmd = 0;
-  if (pidDisabled & 0b1000) motorSpeed = 0;
+  // Rate PID (this won't run with 66 Hz ...)
+  if (!(pidDisabled & 0b0010)) {
+    yawCmd =   updatePID(pidC[R_YAW+RS_RATE],     pidD[R_YAW+RS_RATE],   ypr[0] - lastYpr[0], yawCmd);
+    pitchCmd = updatePID(pidC[R_PITCH+RS_RATE],   pidD[R_PITCH+RS_RATE], ypr[1] - lastYpr[1], pitchCmd);
+    rollCmd =  updatePID(pidC[R_ROLL+RS_RATE],    pidD[R_ROLL+RS_RATE],  ypr[2] - lastYpr[2], rollCmd);
+  }
   
   if ((mode & BIT_PRINT_PID)) {
     mode &= ~BIT_PRINT_PID;

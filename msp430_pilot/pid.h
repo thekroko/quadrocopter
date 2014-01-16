@@ -11,4 +11,4 @@ struct PIDData {
   float errorSum;
 };
 
-float updatePID(PIDConfig &pidc, PIDData &pid, float &input, float &target);
+float updatePID(PIDConfig &pidc, PIDData &pid, float input, float target);

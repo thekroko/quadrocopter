@@ -1,7 +1,7 @@
 #include "pid.h"
 
 /*Performs a single PID step */
-float updatePID(PIDConfig &pidc, PIDData &pid, float &input, float &target) {
+float updatePID(PIDConfig &pidc, PIDData &pid, float input, float target) {
   float error = target - input;
   
   // Update I (prevents freezing)
