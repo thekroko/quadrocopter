@@ -28,13 +28,14 @@ sleep 0.3s
 
 
 # Rate PID
-./msp pid= 2 80.0 2.0 0.0 -9 9 -30 30 # roll
+#./msp pid= 2 100.0 4.0 7.7 -15 15 -30 50 # roll
+./msp pid= 2 142.0 0.07 0.0 0 0 -30 70 # roll -- works well!
 
 # Stabilization PID
-#./msp pid= 5 10.0 0.0 0.0 -5 5 -2 2 # roll
+./msp pid= 5 0.03 0.0055 0.025 -2 2 -3 3 # roll
 
-./msp typr= 0.0 0.0 0.0 0
-./msp pidmask= 01 # disable stabilization
+#./msp pidmask= 01 # disable stabilization
+./msp pidmask= 00
 ./msp mode= 1
 
 echo "Press CTRL+C to stop"
@@ -44,15 +45,27 @@ while [ 1 ]; do
 done & ERR=$!
 trap "for i in 1 2 3; do ./msp cut; done ; kill $ERR; exit" SIGHUP SIGINT SIGTERM
 
-read foo
-./msp typr= 0.0 0.0 2.0 30
-read foo
-./msp typr= 0.0 0.0 0.0 30
-read foo
-./msp typr= 0.0 0.0 -1.0 30
-read foo
-./msp typr= 0.0 0.0 0.0 30
-read foo
+DEST=3.5
+while [ 1 ]; do
+  echo "### DEST=$DEST"
+  ./msp typr= 0.0 0.0 $DEST 30
+  read -n1 -s k
+  if [ "$k" = 'a' ]; then DEST=$(echo "$DEST - 7.0" | bc); fi
+  if [ "$k" = 'd' ]; then DEST=$(echo "$DEST + 7.0" | bc); fi
+done;
+
+#./msp typr= 0.0 0.0 0.0 30
+#read foo
+#./msp typr= 0.0 0.0 1.0 30
+#read foo
+#./msp typr= 0.0 0.0 2.5 30
+#read foo
+#./msp typr= 0.0 0.0 0.0 30
+#read foo
+#./msp typr= 0.0 0.0 -2.0 30
+#read foo
+#./msp typr= 0.0 0.0 0.0 30
+#read foo
 
 ./msp cut
 kill $ERR
