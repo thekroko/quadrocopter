@@ -6,6 +6,7 @@ stty -F /dev/ttyAMA0 cs8 115200 ignbrk -brkint -icrnl -imaxbel -opost -onlcr -is
 
 # Init our low-level control
 modprobe i2c-dev
+./msp test
 ./msp reset
   
 # this will put the MPU6050 into 6-DOF DMP mode
@@ -25,15 +26,33 @@ sleep 0.3s
 #./msp typr= 0.0 0.0 0.0 0.0
 #./msp pidmask= 10010111 # only allow speed control
 
-./msp typr= 0.0 0.0 0.0 15.0
-./msp pidmask= 10010001 # only disable yaw, and the TL/BR motors
 
-#./msp pid= 0 60 0 0 -10 10 -33 100 # yaw
-for i in $(seq 0 5); do
-  ./msp pid= $i 30.0 0.1 0.0 -2 2 -7 7 # pitch
-done;
+# Rate PID
+./msp pid= 2 80.0 2.0 0.0 -9 9 -30 30 # roll
+
+# Stabilization PID
+#./msp pid= 5 10.0 0.0 0.0 -5 5 -2 2 # roll
+
+./msp typr= 0.0 0.0 0.0 0
+./msp pidmask= 01 # disable stabilization
 ./msp mode= 1
 
-echo "Press ENTER to stop"
+echo "Press CTRL+C to stop"
+while [ 1 ]; do
+  ./msp yprerr
+  sleep 0.25
+done & ERR=$!
+trap "for i in 1 2 3; do ./msp cut; done ; kill $ERR; exit" SIGHUP SIGINT SIGTERM
+
 read foo
+./msp typr= 0.0 0.0 2.0 30
+read foo
+./msp typr= 0.0 0.0 0.0 30
+read foo
+./msp typr= 0.0 0.0 -1.0 30
+read foo
+./msp typr= 0.0 0.0 0.0 30
+read foo
+
 ./msp cut
+kill $ERR
